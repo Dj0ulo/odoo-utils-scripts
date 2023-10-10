@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""
+Usage:
+    pr <module> <description>
+"""                                
+
+import sys
+import os
+import subprocess
+import re
+
+
+def git(*args):
+    return subprocess.check_output(['git'] + list(args)).decode("utf-8")
+
+def create_branch(arg1, arg2):
+    """Creates a new Git branch in the current repository.
+
+    Args:
+      arg1: The name of the first argument.
+      arg2: The name of the second argument.
+
+    Returns:
+      The name of the new branch.
+    """
+    current_branch = git('branch', '--show-current').strip()
+    if not re.compile(r'^(saas-)?\d\d\.\d$').match(current_branch):
+        print('Not currently on standard branch')
+        exit()
+
+    text = re.sub(r'[^\w]+',' ', arg2).strip()
+    text = re.sub(r'\s','-', text)
+    new_branch_name = f'{current_branch}-{arg1}-{text}-jula'
+    try:
+        git('branch', new_branch_name)
+    except subprocess.CalledProcessError as e:
+        print(e)
+    git('switch', new_branch_name)
+    return new_branch_name
+
+
+def open_text_file(arg1, arg2):
+    """Opens a text file in VS Code with the given name.
+
+    Args:
+      new_branch_name: The name of the new branch.
+    """
+    temp_file = "/tmp/commit_message.md"
+    template = f"""[FIX] {arg1}: {arg2}
+
+__Current behavior before commit:__
+
+
+__Description of the fix:__
+
+
+__Steps to reproduce the issue on runbot:__
+
+
+opw-"""
+
+    with open(temp_file, 'w') as file:
+        file.write(template)
+
+    subprocess.run(["code", temp_file])
+
+def main():
+    """The main function of the script."""
+    arg1 = sys.argv[1]
+    arg2 = sys.argv[2]
+    new_branch_name = create_branch(arg1, arg2)
+    print(new_branch_name)
+    open_text_file(arg1, arg2)
+
+if __name__ == '__main__':
+    main()
