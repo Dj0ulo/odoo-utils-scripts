@@ -1,0 +1,8 @@
+#!/bin/bash
+pid=$(ps aux | grep '[a]ddons' | awk '{print $2}')
+if [ "$pid" != "" ]; then
+  kill $pid
+  echo "PID $pid killed"
+else
+  echo "No running odoo instances"
+fi
