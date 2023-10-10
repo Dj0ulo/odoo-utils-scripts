@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Check if the argument is given
+if [ -z "$1" ]; then
+  echo "Please provide the name of the branch"
+  exit 1
+fi
+
+# Get the absolute path of the script
+script_path=$(readlink -f "$0")
+
+# Get the directory of the script
+script_dir=$(dirname "$script_path")
+
+# Define the folders to checkout
+folders=(odoo enterprise design-themes)
+
+# Loop through the folders and checkout to the branch
+for folder in "${folders[@]}"; do
+  (
+    cd "$script_dir/../$folder" || exit 2 # Exit if the folder does not exist
+    git switch -f "$1" # Checkout to the branch
+    git pull --ff-only
+  ) &
+done
+
+wait
+
+echo "Done"
