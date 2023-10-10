@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+
+import os
+import sqlite3
+import subprocess
+
+def get_last_clipboard_strings():
+    # Change the following path based on the location of the activity.sqlite file
+    sqlite_db_path = os.path.expanduser("~/.local/share/zeitgeist/activity.sqlite")
+
+    try:
+        # Connect to the SQLite database
+        connection = sqlite3.connect(sqlite_db_path)
+        cursor = connection.cursor()
+
+        # Query the last two clipboard entries from the 'text' table
+        cursor.execute(
+            "SELECT value FROM text ORDER BY id DESC LIMIT 2"
+        )
+        last_two_strings = cursor.fetchall()
+
+        # Close the database connection
+        connection.close()
+
+        return [s[0] for s in last_two_strings]
+    except sqlite3.Error as e:
+        print("Error while accessing the SQLite database:", e)
+        return []
+
+def open_in_vscode(string1, string2):
+    temp_file1 = "/tmp/diff_string1.txt"
+    temp_file2 = "/tmp/diff_string2.txt"
+
+    with open(temp_file1, 'w') as file1, open(temp_file2, 'w') as file2:
+        file1.write(string1)
+        file2.write(string2)
+
+    subprocess.run(["code", "--diff", temp_file1, temp_file2])
+
+def main():
+    clipboard_strings = get_last_clipboard_strings()
+    if len(clipboard_strings) >= 2:
+        string1, string2 = clipboard_strings
+        open_in_vscode(string1, string2)
+    else:
+        print("At least two clipboard strings required for diff.")
+
+if __name__ == "__main__":
+    main()
