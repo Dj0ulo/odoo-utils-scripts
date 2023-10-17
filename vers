@@ -6,6 +6,12 @@ if [ -z "$1" ]; then
   exit 1
 fi
 
+branch=$1
+if  [[ $branch != *.0 ]] && [[ $branch != saas-* ]] ;
+then
+    branch="saas-$branch"
+fi
+
 # Get the absolute path of the script
 script_path=$(readlink -f "$0")
 
@@ -19,7 +25,7 @@ folders=(odoo enterprise design-themes)
 for folder in "${folders[@]}"; do
   (
     cd "$script_dir/../$folder" || exit 2 # Exit if the folder does not exist
-    git switch -f "$1" # Checkout to the branch
+    git switch -f "$branch" # Checkout to the branch
     git pull --ff-only
   ) &
 done
