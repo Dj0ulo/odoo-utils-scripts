@@ -22,4 +22,6 @@ if '-c' in sys.argv:
 try:
   subprocess.call(command)
 except:
-  print('Bye bye!')
+  print()
+  print('Command:')
+  print(' '.join(command))
