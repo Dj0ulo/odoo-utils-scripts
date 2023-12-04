@@ -7,7 +7,10 @@ os.chdir('/home/odoo/src/odoo')
 
 current_branch = subprocess.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
 addons_path = ['/home/odoo/src/enterprise', '/home/odoo/src/design-themes', '/home/odoo/src/odoo/addons']
-dbname = f'db-{current_branch}'
+if current_branch.startswith('saas'):
+  dbname = f'db-{current_branch[:9]}'
+else:
+  dbname = f'db-{current_branch[:4]}'
 
 if '-i' in sys.argv:
   addons_path += ['/home/odoo/src/internal/private', '/home/odoo/src/internal/trial', '/home/odoo/src/internal/demo', '/home/odoo/src/internal/default']
