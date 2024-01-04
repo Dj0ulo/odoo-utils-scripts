@@ -3,9 +3,11 @@ import sys
 import subprocess
 import os
 
-os.chdir('/home/odoo/src/odoo')
-
+# We are likely never going to checkout to a random commit on design-themes but always on the branch
+os.chdir('/home/odoo/src/design-themes')
 current_branch = subprocess.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
+
+os.chdir('/home/odoo/src/odoo')
 addons_path = ['/home/odoo/src/enterprise', '/home/odoo/src/design-themes', '/home/odoo/src/odoo/addons']
 if current_branch.startswith('saas'):
   dbname = f'db-{current_branch[:9]}'
