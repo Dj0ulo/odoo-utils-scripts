@@ -10,18 +10,18 @@ current_branch = subprocess.check_output(['git', 'branch', '--show-current']).de
 os.chdir('/home/odoo/src/odoo')
 addons_path = ['/home/odoo/src/enterprise', '/home/odoo/src/design-themes', '/home/odoo/src/odoo/addons']
 if current_branch.startswith('saas'):
-  dbname = f'db-{current_branch[:9]}'
+  dbname = f'db-{current_branch[5:]}'
 else:
-  dbname = f'db-{current_branch[:4]}'
+  dbname = f'db-{current_branch}'
 
-if '-i' in sys.argv:
+if '--internal' in sys.argv:
   addons_path += ['/home/odoo/src/internal/private', '/home/odoo/src/internal/trial', '/home/odoo/src/internal/demo', '/home/odoo/src/internal/default']
 
 command = ['/home/odoo/src/odoo/odoo-bin', f'--addons-path={",".join(addons_path)}', '-d', dbname]
-if '-d' in sys.argv:
+if '--vscode' in sys.argv:
   command = ['python3', '-m', 'debugpy', '--listen', 'localhost:5678'] + command
 
-if '-c' in sys.argv:
+if '--new' in sys.argv:
   subprocess.call(['dropdb', dbname])
 
 try:
