@@ -24,9 +24,22 @@ if '--vscode' in sys.argv:
 if '--new' in sys.argv:
   subprocess.call(['dropdb', dbname])
 
+remaining_args = sys.argv[1:]
+for arg in ['--internal', '--vscode', '--new']:
+  if arg in remaining_args:
+    remaining_args.remove(arg)
+
+if remaining_args:
+  command += remaining_args
+
+def print_complete_command():
+  print(' '.join(command))
+
 try:
+  print_complete_command()
+  print()
   subprocess.call(command)
 except:
   print()
-  print('Command:')
-  print(' '.join(command))
+  print('Odoo terminated, command:')
+  print_complete_command()
