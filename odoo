@@ -3,34 +3,39 @@ import sys
 import subprocess
 import os
 
-# We are likely never going to checkout to a random commit on design-themes but always on the branch
-os.chdir('/home/odoo/src/design-themes')
-current_branch = subprocess.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
+command = ['/home/odoo/src/odoo/odoo-bin']
+odoo_bin_args = sys.argv[1:]
+for arg in ['--internal', '--vscode', '--new']:
+  if arg in odoo_bin_args:
+    odoo_bin_args.remove(arg)
+
+if odoo_bin_args:
+  command += odoo_bin_args
+
+if '-d' not in sys.argv:
+  # We are likely never going to checkout to a random commit on design-themes but always on the branch
+  os.chdir('/home/odoo/src/design-themes')
+  current_branch = subprocess.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
+
+  if current_branch.startswith('saas'):
+    dbname = f'db-{current_branch[5:]}'
+  else:
+    dbname = f'db-{current_branch}'
+  command += ['-d', dbname]
 
 os.chdir('/home/odoo/src/odoo')
-addons_path = ['/home/odoo/src/enterprise', '/home/odoo/src/design-themes', '/home/odoo/src/odoo/addons']
-if current_branch.startswith('saas'):
-  dbname = f'db-{current_branch[5:]}'
-else:
-  dbname = f'db-{current_branch}'
 
+addons_path = ['/home/odoo/src/enterprise', '/home/odoo/src/design-themes', '/home/odoo/src/odoo/addons']
 if '--internal' in sys.argv:
   addons_path += ['/home/odoo/src/internal/private', '/home/odoo/src/internal/trial', '/home/odoo/src/internal/demo', '/home/odoo/src/internal/default']
 
-command = ['/home/odoo/src/odoo/odoo-bin', f'--addons-path={",".join(addons_path)}', '-d', dbname]
+command += [f'--addons-path={",".join(addons_path)}']
+
 if '--vscode' in sys.argv:
   command = ['python3', '-m', 'debugpy', '--listen', 'localhost:5678'] + command
 
 if '--new' in sys.argv:
   subprocess.call(['dropdb', dbname])
-
-remaining_args = sys.argv[1:]
-for arg in ['--internal', '--vscode', '--new']:
-  if arg in remaining_args:
-    remaining_args.remove(arg)
-
-if remaining_args:
-  command += remaining_args
 
 def print_complete_command():
   print(' '.join(command))
@@ -40,6 +45,8 @@ try:
   print()
   subprocess.call(command)
 except:
+  pass
+finally:
   print()
   print('Odoo terminated, command:')
   print_complete_command()
