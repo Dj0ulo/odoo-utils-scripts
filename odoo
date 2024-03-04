@@ -12,7 +12,9 @@ for arg in ['--internal', '--vscode', '--new']:
 if odoo_bin_args:
   command += odoo_bin_args
 
-if '-d' not in sys.argv:
+if '-d' in sys.argv:
+  dbname = sys.argv[sys.argv.index('-d') + 1]
+else:
   # We are likely never going to checkout to a random commit on design-themes but always on the branch
   os.chdir('/home/odoo/src/design-themes')
   current_branch = subprocess.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
