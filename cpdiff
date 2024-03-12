@@ -28,8 +28,8 @@ def get_last_clipboard_strings():
         return []
 
 def open_in_vscode(string1, string2):
-    temp_file1 = "/tmp/diff_string1.txt"
-    temp_file2 = "/tmp/diff_string2.txt"
+    temp_file1 = "/tmp/old_string"
+    temp_file2 = "/tmp/new_string"
 
     with open(temp_file1, 'w') as file1, open(temp_file2, 'w') as file2:
         file1.write(string1)
@@ -41,7 +41,7 @@ def main():
     clipboard_strings = get_last_clipboard_strings()
     if len(clipboard_strings) >= 2:
         string1, string2 = clipboard_strings
-        open_in_vscode(string1, string2)
+        open_in_vscode(string2, string1)
     else:
         print("At least two clipboard strings required for diff.")
 
