@@ -24,7 +24,7 @@ def create_branch(arg1, arg2):
       The name of the new branch.
     """
     current_branch = git('branch', '--show-current').strip()
-    if not re.compile(r'^(saas-)?\d\d\.\d$').match(current_branch):
+    if not re.compile(r'^(saas-)?\d\d\.\d|master$').match(current_branch):
         print('Not currently on standard branch')
         exit()
 
