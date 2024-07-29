@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+import os
+import sys
+import glob
+import gzip
+import shutil
+import subprocess
+
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python script.py <word_to_grep>")
+        sys.exit(1)
+
+    word_to_grep = sys.argv[1]
+    downloads_path = os.path.expanduser('~/Downloads')
+    logs_path = os.path.join(downloads_path, f"{word_to_grep}.log")
+
+    # Find the latest .gz file
+    gz_files = glob.glob(os.path.join(downloads_path, '*.gz'))
+    if not gz_files:
+        print("No .gz files found in ~/Downloads")
+        sys.exit(1)
+
+    latest_gz_file = max(gz_files, key=os.path.getmtime)
+
+    # Extract the .gz file
+    with gzip.open(latest_gz_file, 'rb') as f_in:
+        extracted_file_path = latest_gz_file[:-3]
+        with open(extracted_file_path, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+    # Grep for the word in the extracted file and write to logs_path
+    with open(logs_path, 'w') as log_file:
+        subprocess.run(['grep', word_to_grep, extracted_file_path], stdout=log_file)
+
+    # Clean up the extracted file
+    os.remove(extracted_file_path)
+    print(f"Grep results saved to {logs_path}")
+
+if __name__ == '__main__':
+    main()
