@@ -5,7 +5,7 @@ import os
 
 command = ['/home/odoo/src/odoo/odoo-bin']
 odoo_bin_args = sys.argv[1:]
-for arg in ['--internal', '--vscode', '--new']:
+for arg in ['--internal', '--vscode', '--new', '--upgrade']:
   if arg in odoo_bin_args:
     odoo_bin_args.remove(arg)
 
@@ -32,6 +32,13 @@ if '--internal' in sys.argv:
   addons_path += ['/home/odoo/src/internal/private', '/home/odoo/src/internal/trial', '/home/odoo/src/internal/demo', '/home/odoo/src/internal/default']
 
 command += [f'--addons-path={",".join(addons_path)}']
+
+if '--upgrade' in sys.argv:
+  upgrade_path = ['/home/odoo/src/upgrade-util/src', '/home/odoo/src/upgrade/migrations']
+  command += [
+    f'--upgrade-path={",".join(upgrade_path)}',
+    '-u all',
+  ]
 
 if '--vscode' in sys.argv:
   command = ['python3', '-m', 'debugpy', '--listen', 'localhost:5678'] + command
