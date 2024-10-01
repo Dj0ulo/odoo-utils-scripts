@@ -62,15 +62,14 @@ odoo.define("@search_utils" + Math.random(), ["@web/session"], async function (r
       const i = caseSensitive
         ? content.indexOf(normSS)
         : content.toLowerCase().indexOf(normSS.toLowerCase());
-      let sub = "…%c%c";
-      if (i >= 0) {
-        sub =
-          content.substring(Math.max(0, i - 80), i) +
-          `%c${content.substring(i, i + searchString.length)}%c` +
-          content.substring(i + searchString.length, Math.min(content.length, i + 80));
+      if (i === -1) return null;
 
-        sub = "…" + sub.trim() + "…"
-      }
+      let sub =
+        content.substring(Math.max(0, i - 80), i) +
+        `%c${content.substring(i, i + searchString.length)}%c` +
+        content.substring(i + searchString.length, Math.min(content.length, i + 80));
+
+      sub = "…" + sub.trim() + "…"
       return {
         title: m.record_name,
         taskId: m.res_id,
@@ -107,7 +106,9 @@ odoo.define("@search_utils" + Math.random(), ["@web/session"], async function (r
     const messages = await searchMessages(taskIds, searchString, caseSensitive);
 
     console.log(messages);
-    let results = messages.map(m => formatSearchResult(m, searchString, caseSensitive));
+    let results = messages
+      .map(m => formatSearchResult(m, searchString, caseSensitive))
+      .filter(m => m);
     results = filterDuplicateResults(results);
     results.forEach(logResult);
   }
