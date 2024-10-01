@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+import os
+import glob
+import subprocess
+
+def main():
+    # Set the path to your Downloads folder
+    downloads_path = os.path.expanduser('~/Downloads')
+    
+    # Search for .dump, .sql, or .zip files
+    dump_files = glob.glob(os.path.join(downloads_path, '*.dump')) + \
+                 glob.glob(os.path.join(downloads_path, '*.sql')) + \
+                 glob.glob(os.path.join(downloads_path, '*.zip'))
+    
+    if not dump_files:
+        print("No dump, sql, or zip files found in the Downloads folder.")
+        return None
+    
+    # Find the most recent file by modification time
+    latest_file = max(dump_files, key=os.path.getmtime)
+
+    file_path = os.path
+    
+    # Get the filename without the extension
+    db_name = os.path.splitext(os.path.basename(latest_file))[0]
+
+    subprocess.run(['oes', 'restore-dump', db_name, latest_file, '--remove-custo'])
+
+if __name__ == '__main__':
+    main()
