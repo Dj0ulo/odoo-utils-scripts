@@ -1,7 +1,7 @@
 #!/bin/bash
 pid=$(ps aux | grep '[a]ddons' | awk '{print $2}')
 if [ "$pid" != "" ]; then
-  kill $pid
+  kill -9 $pid
   echo "Odoo instance (pid=$pid) killed"
 else
   echo "No running Odoo instances"
@@ -9,7 +9,7 @@ fi
 
 pid=$(ps aux | grep '[d]ebugpy' | awk '{print $2}')
 if [ "$pid" != "" ]; then
-  kill $pid
+  kill -9 $pid
   echo "Debugpy instance (pid=$pid) killed"
 else
   echo "No running debugpy instances"
