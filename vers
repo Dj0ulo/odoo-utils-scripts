@@ -9,7 +9,7 @@ fi
 branch=$1
 if [[ ${#branch} == 2 ]]; then
     branch="$branch.0"
-elif  [[ $branch != *.0 ]] && [[ $branch != saas-* ]]; then
+elif  [[ $branch != *.0 ]] && [[ $branch != saas-* ]] && [[ $branch != master ]]; then
     branch="saas-$branch"
 fi
 
