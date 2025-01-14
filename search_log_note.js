@@ -101,7 +101,7 @@ odoo.define("@search_utils" + Math.random(), ["@web/session"], async function (r
   }
 
   async function search(searchString, caseSensitive = false) {
-    const partnerId = session.storeData.Persona[1].id;
+    const partnerId = session.storeData["res.partner"][1].id;
     const taskIds = await searchTasks(partnerId);
     const messages = await searchMessages(taskIds, searchString, caseSensitive);
 
