@@ -5,7 +5,7 @@ import os
 
 command = ['/home/odoo/src/odoo/odoo-bin']
 odoo_bin_args = sys.argv[1:]
-for arg in ['--internal', '--vscode', '--new', '--upgrade']:
+for arg in ['--internal', '--vscode', '--new', '--upgrade', '--community']:
   if arg in odoo_bin_args:
     odoo_bin_args.remove(arg)
 
@@ -28,6 +28,8 @@ else:
 os.chdir('/home/odoo/src/odoo')
 
 addons_path = ['/home/odoo/src/enterprise', '/home/odoo/src/design-themes', '/home/odoo/src/odoo/addons']
+if '--community' in sys.argv:
+    addons_path = ['/home/odoo/src/odoo/addons']
 if '--internal' in sys.argv:
   addons_path += ['/home/odoo/src/internal/private', '/home/odoo/src/internal/trial', '/home/odoo/src/internal/demo', '/home/odoo/src/internal/default']
 
