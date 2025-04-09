@@ -38,6 +38,7 @@ command += [f'--addons-path={",".join(addons_path)}']
 if '--upgrade' in sys.argv:
   upgrade_path = ['/home/odoo/src/upgrade-util/src', '/home/odoo/src/upgrade/migrations']
   command += [
+    '--stop-after-init',
     f'--upgrade-path={",".join(upgrade_path)}',
     '-u all',
   ]
