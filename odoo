@@ -3,7 +3,9 @@ import sys
 import subprocess
 import os
 
-command = ['/home/odoo/src/odoo/odoo-bin']
+src_dir = '/home/odoo/src'
+
+command = [f'{src_dir}/odoo/odoo-bin']
 odoo_bin_args = sys.argv[1:]
 for arg in ['--internal', '--vscode', '--new', '--upgrade', '--community']:
   if arg in odoo_bin_args:
@@ -16,7 +18,7 @@ if '-d' in sys.argv:
   dbname = sys.argv[sys.argv.index('-d') + 1]
 else:
   # We are likely never going to checkout to a random commit on design-themes but always on the branch
-  os.chdir('/home/odoo/src/design-themes')
+  os.chdir(f'{src_dir}/design-themes')
   current_branch = subprocess.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
 
   if current_branch.startswith('saas'):
@@ -25,18 +27,18 @@ else:
     dbname = f'db-{current_branch}'
   command += ['-d', dbname]
 
-os.chdir('/home/odoo/src/odoo')
+os.chdir(f'{src_dir}/odoo')
 
-addons_path = ['/home/odoo/src/enterprise', '/home/odoo/src/design-themes', '/home/odoo/src/odoo/addons']
+addons_path = [f'{src_dir}/enterprise', f'{src_dir}/design-themes', f'{src_dir}/odoo/addons']
 if '--community' in sys.argv:
-    addons_path = ['/home/odoo/src/odoo/addons']
+    addons_path = [f'{src_dir}/odoo/addons']
 if '--internal' in sys.argv:
-  addons_path += ['/home/odoo/src/internal/private', '/home/odoo/src/internal/trial', '/home/odoo/src/internal/demo', '/home/odoo/src/internal/default']
+  addons_path += [f'{src_dir}/internal/private', f'{src_dir}/internal/trial', f'{src_dir}/internal/demo', f'{src_dir}/internal/default']
 
 command += [f'--addons-path={",".join(addons_path)}']
 
 if '--upgrade' in sys.argv:
-  upgrade_path = ['/home/odoo/src/upgrade-util/src', '/home/odoo/src/upgrade/migrations']
+  upgrade_path = [f'{src_dir}/upgrade-util/src', f'{src_dir}/upgrade/migrations']
   command += [
     '--stop-after-init',
     f'--upgrade-path={",".join(upgrade_path)}',
