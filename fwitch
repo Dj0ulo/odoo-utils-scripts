@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+import sys
+import subprocess
+
+arg = sys.argv[1]
+origin, branch = arg.split(':')
+
+subprocess.check_output(['git', 'fetch', origin, branch])
+subprocess.call(['git', 'switch', branch])
