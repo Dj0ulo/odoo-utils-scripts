@@ -26,8 +26,12 @@ folders=(odoo enterprise design-themes)
 for folder in "${folders[@]}"; do
   (
     cd "$script_dir/../$folder" || exit 2 # Exit if the folder does not exist
+    # Only stash if there are changes (including untracked)
+    if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+      git stash push --include-untracked -m "Auto-stash before branch switch by vers script"
+    fi
     git switch -f "$branch" # Checkout to the branch
-    git pull --ff-only
+    git pull --rebase
   ) &
 done
 
