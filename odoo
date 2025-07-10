@@ -2,6 +2,45 @@
 import sys
 import subprocess
 import os
+import re
+
+def infer_current_branch_from_release(src_dir):
+    release_file = f'{src_dir}/odoo/odoo/release.py'
+    with open(release_file) as f:
+        for line in f:
+            if line.strip().startswith('version_info'):
+                match = re.search(r'version_info\s*=\s*\(([^)]*)\)', line)
+                if match:
+                  version_info_str = match.group(1)
+                  # Split by comma, handle quoted strings and ints
+                  parts = [p.strip().strip("'\"") for p in version_info_str.split(',')]
+                  version_info = []
+                  for part in parts:
+                    if part.isdigit():
+                      version_info.append(int(part))
+                    else:
+                      version_info.append(part)
+                else:
+                  raise RuntimeError("Could not parse version_info line")
+                break
+        else:
+            raise RuntimeError("version_info not found in release.py")
+
+    if isinstance(version_info[0], str) and version_info[0].startswith('saas~'):
+        # e.g. ('saas~18', 4, 0, ...)
+        major = version_info[0].replace('saas~', '')
+        minor = version_info[1]
+        return f'saas-{major}.{minor}'
+    elif isinstance(version_info[0], int):
+        # e.g. (17, 3, 0, ...)
+        major = version_info[0]
+        minor = version_info[1]
+        if minor == 0:
+            return f'{major}.0'
+        else:
+            return f'saas-{major}.{minor}'
+    else:
+        raise RuntimeError("Unknown version_info format")
 
 src_dir = '/home/odoo/src'
 
@@ -17,10 +56,7 @@ if odoo_bin_args:
 if '-d' in sys.argv:
   dbname = sys.argv[sys.argv.index('-d') + 1]
 else:
-  # We are likely never going to checkout to a random commit on design-themes but always on the branch
-  os.chdir(f'{src_dir}/design-themes')
-  current_branch = subprocess.check_output(['git', 'branch', '--show-current']).decode("utf-8").strip()
-
+  current_branch = infer_current_branch_from_release(src_dir)
   if current_branch.startswith('saas'):
     dbname = f'db-{current_branch[5:]}'
   else:
