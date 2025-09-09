@@ -4,6 +4,7 @@ import subprocess
 import os
 import re
 
+
 def infer_current_branch_from_release(src_dir):
     release_file = f'{src_dir}/odoo/odoo/release.py'
     with open(release_file) as f:
@@ -11,17 +12,18 @@ def infer_current_branch_from_release(src_dir):
             if line.strip().startswith('version_info'):
                 match = re.search(r'version_info\s*=\s*\(([^)]*)\)', line)
                 if match:
-                  version_info_str = match.group(1)
-                  # Split by comma, handle quoted strings and ints
-                  parts = [p.strip().strip("'\"") for p in version_info_str.split(',')]
-                  version_info = []
-                  for part in parts:
-                    if part.isdigit():
-                      version_info.append(int(part))
-                    else:
-                      version_info.append(part)
+                    version_info_str = match.group(1)
+                    # Split by comma, handle quoted strings and ints
+                    parts = [p.strip().strip("'\"")
+                             for p in version_info_str.split(',')]
+                    version_info = []
+                    for part in parts:
+                        if part.isdigit():
+                            version_info.append(int(part))
+                        else:
+                            version_info.append(part)
                 else:
-                  raise RuntimeError("Could not parse version_info line")
+                    raise RuntimeError("Could not parse version_info line")
                 break
         else:
             raise RuntimeError("version_info not found in release.py")
@@ -42,61 +44,70 @@ def infer_current_branch_from_release(src_dir):
     else:
         raise RuntimeError("Unknown version_info format")
 
+
 src_dir = '/home/odoo/src'
 
 command = [f'{src_dir}/odoo/odoo-bin']
 odoo_bin_args = sys.argv[1:]
 for arg in ['--internal', '--vscode', '--new', '--upgrade', '--enterprise']:
-  if arg in odoo_bin_args:
-    odoo_bin_args.remove(arg)
+    if arg in odoo_bin_args:
+        odoo_bin_args.remove(arg)
 
 if odoo_bin_args:
-  command += odoo_bin_args
+    command += odoo_bin_args
 
 if '-d' in sys.argv:
-  dbname = sys.argv[sys.argv.index('-d') + 1]
+    dbname = sys.argv[sys.argv.index('-d') + 1]
 else:
-  current_branch = infer_current_branch_from_release(src_dir)
-  if current_branch.startswith('saas'):
-    dbname = f'db-{current_branch[5:]}'
-  else:
-    dbname = f'db-{current_branch}'
-  command += ['-d', dbname]
+    current_branch = infer_current_branch_from_release(src_dir)
+    if current_branch.startswith('saas'):
+        dbname = f'db-{current_branch[5:]}'
+    else:
+        dbname = f'db-{current_branch}'
+    if '--enterprise' in sys.argv:
+        dbname += 'e'
+    command += ['-d', dbname]
 
 os.chdir(f'{src_dir}/odoo')
 
 addons_path = [f'{src_dir}/odoo/addons']
 if '--enterprise' in sys.argv:
-  addons_path = [f'{src_dir}/enterprise', f'{src_dir}/design-themes', f'{src_dir}/odoo/addons']
+    addons_path = [f'{src_dir}/enterprise',
+                   f'{src_dir}/design-themes', f'{src_dir}/odoo/addons']
 if '--internal' in sys.argv:
-  addons_path += [f'{src_dir}/internal/private', f'{src_dir}/internal/trial', f'{src_dir}/internal/demo', f'{src_dir}/internal/default']
+    addons_path += [f'{src_dir}/internal/private', f'{src_dir}/internal/trial',
+                    f'{src_dir}/internal/demo', f'{src_dir}/internal/default']
 
 command += [f'--addons-path={",".join(addons_path)}']
 
 if '--upgrade' in sys.argv:
-  upgrade_path = [f'{src_dir}/upgrade-util/src', f'{src_dir}/upgrade/migrations']
-  command += [
-    '--stop-after-init',
-    f'--upgrade-path={",".join(upgrade_path)}',
-    '-u all',
-  ]
+    upgrade_path = [f'{src_dir}/upgrade-util/src',
+                    f'{src_dir}/upgrade/migrations']
+    command += [
+        '--stop-after-init',
+        f'--upgrade-path={",".join(upgrade_path)}',
+        '-u all',
+    ]
 
 if '--vscode' in sys.argv:
-  command = ['python3', '-m', 'debugpy', '--listen', 'localhost:5678'] + command
+    command = ['python3', '-m', 'debugpy',
+               '--listen', 'localhost:5678'] + command
 
 if '--new' in sys.argv:
-  subprocess.call(['dropdb', dbname])
+    subprocess.call(['dropdb', dbname])
+
 
 def print_complete_command():
-  print(' '.join(command))
+    print(' '.join(command))
+
 
 try:
-  print_complete_command()
-  print()
-  subprocess.call(command)
+    print_complete_command()
+    print()
+    subprocess.call(command)
 except:
-  pass
+    pass
 finally:
-  print()
-  print('Odoo terminated, command:')
-  print_complete_command()
+    print()
+    print('Odoo terminated, command:')
+    print_complete_command()
