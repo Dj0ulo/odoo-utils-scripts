@@ -94,7 +94,7 @@ if '--upgrade' in sys.argv:
 
 if '--vscode' in sys.argv:
     command = ['python3', '-m', 'debugpy',
-               '--listen', 'localhost:5678'] + command
+               '--listen', 'localhost:5678'] + command + ["--limit-time-real=9999"]
 
 if '--new' in sys.argv:
     subprocess.call(['dropdb', dbname])
