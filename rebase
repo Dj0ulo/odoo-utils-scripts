@@ -1,0 +1,9 @@
+#!/bin/bash
+
+branch=$(git rev-parse --abbrev-ref HEAD);
+if [[ "$branch" == saas-* ]]; then
+    base=$(echo "$branch" | awk -F- "{print \$1\"-\"\$2}");
+else
+    base=$(echo "$branch" | awk -F- "{print \$1}");
+fi;
+git switch "$base" && git pull && git checkout - && git rebase "$base"
