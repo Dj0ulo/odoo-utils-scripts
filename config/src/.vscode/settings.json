@@ -1,0 +1,9 @@
+{
+    "python.analysis.extraPaths": [
+        "../odoo/*",
+        "../odoo/odoo/*",
+    ],
+    "terminal.integrated.cwd": "odoo",
+    "Odoo.selectedProfile": "default",
+    "git.ignoreLimitWarning": true
+}
