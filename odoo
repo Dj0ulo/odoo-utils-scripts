@@ -43,6 +43,27 @@ def infer_current_branch_from_release(src_dir):
             return f'saas-{major}.{minor}'
     else:
         raise RuntimeError("Unknown version_info format")
+    
+def generate_db_name():
+    # Get current git branch
+    try:
+        git_branch = subprocess.check_output([
+            'git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=f'{src_dir}/odoo').decode().strip()
+    except Exception:
+        git_branch = None
+
+    if git_branch and git_branch.startswith('master-'):
+        dbname = git_branch
+    else:
+        current_branch = infer_current_branch_from_release(src_dir)
+        if current_branch.startswith('saas'):
+            dbname = f'db-{current_branch[5:]}'
+        else:
+            dbname = f'db-{current_branch}'
+
+    if '--enterprise' in sys.argv:
+        dbname += 'e'
+    return dbname
 
 
 src_dir = '/home/odoo/src'
@@ -59,13 +80,7 @@ if odoo_bin_args:
 if '-d' in sys.argv:
     dbname = sys.argv[sys.argv.index('-d') + 1]
 else:
-    current_branch = infer_current_branch_from_release(src_dir)
-    if current_branch.startswith('saas'):
-        dbname = f'db-{current_branch[5:]}'
-    else:
-        dbname = f'db-{current_branch}'
-    if '--enterprise' in sys.argv:
-        dbname += 'e'
+    dbname = generate_db_name()
     command += ['-d', dbname]
 
 os.chdir(f'{src_dir}/odoo')
