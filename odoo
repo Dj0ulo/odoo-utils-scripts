@@ -112,7 +112,12 @@ if '--vscode' in sys.argv:
                '--listen', 'localhost:5678'] + command + ["--limit-time-real=9999"]
 
 if '--new' in sys.argv:
-    subprocess.call(['dropdb', dbname])
+    confirm = input(f"Are you sure you want to drop the database '{dbname}'? [y/N]: ")
+    if confirm.lower() == 'y':
+        subprocess.call(['dropdb', dbname])
+    else:
+        print("Database drop cancelled.")
+        exit(0)
 
 
 def print_complete_command():
