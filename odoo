@@ -45,24 +45,14 @@ def infer_current_branch_from_release(src_dir):
         raise RuntimeError("Unknown version_info format")
     
 def generate_db_name():
-    # Get current git branch
-    try:
-        git_branch = subprocess.check_output([
-            'git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=f'{src_dir}/odoo').decode().strip()
-    except Exception:
-        git_branch = None
-
-    if git_branch and git_branch.startswith('master-'):
-        dbname = git_branch
+    current_branch = infer_current_branch_from_release(src_dir)
+    if current_branch.startswith('saas'):
+        dbname = f'db-{current_branch[5:]}'
     else:
-        current_branch = infer_current_branch_from_release(src_dir)
-        if current_branch.startswith('saas'):
-            dbname = f'db-{current_branch[5:]}'
-        else:
-            dbname = f'db-{current_branch}'
+        dbname = f'db-{current_branch}'
 
     if '--enterprise' in sys.argv:
-        dbname += 'e'
+        dbname += '-e'
     
     if '--test-tags' in sys.argv:
         dbname += '-test'
