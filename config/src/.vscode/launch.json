@@ -24,7 +24,7 @@
             "name": "Odoo: Debug JavaScript (Chrome)",
             "type": "chrome",
             "request": "launch",
-            "url": "http://localhost:8069/web?debug=assets",
+            "url": "http://localhost:8069?enable_editor=1&debug=assets",
             "webRoot": "${workspaceFolder}",
             "sourceMaps": true,
             "sourceMapPathOverrides": {
