@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Script to create a fixup commit and autosquash it via rebase
+# Usage: ./git-fixup.sh <commit-hash>
+
+set -e
+
+if [ $# -eq 0 ]; then
+    echo "Error: No commit hash provided"
+    echo "Usage: $0 <commit-hash>"
+    exit 1
+fi
+
+COMMIT=$1
+
+# Verify the commit exists
+if ! git rev-parse --verify "$COMMIT^{commit}" >/dev/null 2>&1; then
+    echo "Error: Invalid commit hash '$COMMIT'"
+    exit 1
+fi
+
+# Create the fixup commit
+echo "Creating fixup commit for $COMMIT..."
+git commit --fixup="$COMMIT"
+
+# Perform interactive rebase with autosquash (without opening editor)
+echo "Rebasing with autosquash..."
+GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash "$COMMIT~2"
+
+echo "Done! Fixup commit has been squashed into $COMMIT"
