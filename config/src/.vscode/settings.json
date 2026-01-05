@@ -1,9 +1,6 @@
 {
-    "python.analysis.extraPaths": [
-        "../odoo/*",
-        "../odoo/odoo/*",
-    ],
     "terminal.integrated.cwd": "odoo",
-    "Odoo.selectedProfile": "default",
-    "git.ignoreLimitWarning": true
+    "Odoo.selectedProfile": "Disabled",
+    "git.ignoreLimitWarning": true,
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
 }
