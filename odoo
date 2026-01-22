@@ -89,8 +89,8 @@ if '--internal' in sys.argv:
 
 command += [f'--addons-path={",".join(addons_path)}']
 
-if '--test-tags' not in sys.argv and '--without-demo' not in sys.argv:
-    command += [f'--without-demo=false']
+if '--with-demo' not in sys.argv and '--without-demo' not in sys.argv:
+    command += [f'--with-demo']
 
 if '--upgrade' in sys.argv:
     upgrade_path = [f'{src_dir}/upgrade-util/src',
