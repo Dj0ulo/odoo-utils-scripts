@@ -137,6 +137,8 @@ export PATH="$PATH:/home/odoo/src/scripts"
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias lola="git log --graph --pretty='%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --all"
+alias gwipe="echo 'Nope, maybe you want gwip?'"
+alias pullf="git fetch && git reset --hard @{u} && git clean -fd"
 
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
