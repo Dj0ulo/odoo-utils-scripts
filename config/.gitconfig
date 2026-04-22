@@ -1,0 +1,5 @@
+[user]
+	name = Julien Launois (jula)
+	email = jula@odoo.com
+[core]
+	editor = code --wait
