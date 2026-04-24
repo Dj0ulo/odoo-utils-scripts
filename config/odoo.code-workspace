@@ -8,12 +8,14 @@
 		}
 	],
     "settings": {
-        "python.defaultInterpreterPath": "/home/odoo/src/venv/bin/python3",
+        "python.defaultInterpreterPath": "~/src/venv/bin/python3",
         "python.analysis.extraPaths": [
             "~/src/symlink",
             "~/src/odoo",
             "~/src",
-        ]
+        ],
+        "git.ignoreLimitWarning": true,
+        "editor.defaultFormatter": "dbaeumer.vscode-eslint"
     },
     "launch": {
         "version": "0.2.0",
