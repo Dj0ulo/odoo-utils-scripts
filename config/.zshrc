@@ -107,9 +107,9 @@ source $ZSH/oh-my-zsh.sh
 # export MANPATH="/usr/local/man:$MANPATH"
 
 if [[ "$PWD" == "$HOME/src"* ]]; then
-    source /home/odoo/src/venv/bin/activate
+    source $HOME/src/venv/bin/activate
 fi
-export PATH="$PATH:/home/odoo/src/scripts"
+export PATH="$PATH:$HOME/src/scripts"
 
 
 # You may need to manually set your language environment
