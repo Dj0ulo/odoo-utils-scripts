@@ -43,6 +43,15 @@ def infer_current_branch_from_release(src_dir):
             return f'saas-{major}.{minor}'
     else:
         raise RuntimeError("Unknown version_info format")
+
+
+def get_current_version_tuple(src_dir):
+    branch = infer_current_branch_from_release(src_dir)
+    if branch.startswith('saas-'):
+        branch = branch[5:]
+
+    major_str, minor_str = branch.split('.', 1)
+    return int(major_str), int(minor_str)
     
 def generate_db_name():
     current_branch = infer_current_branch_from_release(src_dir)
@@ -51,12 +60,9 @@ def generate_db_name():
     else:
         dbname = f'db-{current_branch}'
 
-    if '--enterprise' in sys.argv:
+    if '--enterprise' in sys.argv or '-e' in sys.argv:
         dbname += '-e'
     
-    if '--test-tags' in sys.argv:
-        dbname += '-test'
-
     return dbname
 
 
@@ -82,12 +88,18 @@ while i < len(odoo_bin_args):
 
 odoo_bin_args = filtered_args
 
-for arg in ['--internal', '--vscode', '--new', '--upgrade', '--enterprise']:
+for arg in ['--internal', '--vscode', '--new', '--upgrade', '--enterprise', '-e']:
     if arg in odoo_bin_args:
         odoo_bin_args.remove(arg)
 
 if odoo_bin_args:
     command += odoo_bin_args
+
+if (
+    get_current_version_tuple(src_dir) >= (18, 3)
+    and not any('--with-demo' in arg or '--without-demo' in arg for arg in odoo_bin_args)
+):
+    command.append('--with-demo')
 
 if '-d' in sys.argv:
     dbname = sys.argv[sys.argv.index('-d') + 1]
@@ -98,7 +110,7 @@ else:
 os.chdir(f'{src_dir}/odoo')
 
 addons_path = [f'{src_dir}/odoo/addons']
-if '--enterprise' in sys.argv:
+if '--enterprise' in sys.argv or '-e' in sys.argv:
     addons_path = [f'{src_dir}/enterprise',
                    f'{src_dir}/design-themes', f'{src_dir}/odoo/addons']
 if '--internal' in sys.argv:
