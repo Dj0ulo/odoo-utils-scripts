@@ -6,7 +6,7 @@ import re
 
 
 def infer_current_branch_from_release(src_dir):
-    release_file = f'{src_dir}/odoo/odoo/release.py'
+    release_file = f'{src_dir}/odoo{"-tmp" if "--tmp" in sys.argv else ""}/odoo/release.py'
     with open(release_file) as f:
         for line in f:
             if line.strip().startswith('version_info'):
@@ -68,7 +68,7 @@ def generate_db_name():
 
 src_dir = os.path.expanduser('~/src')
 
-command = [f'{src_dir}/odoo/odoo-bin']
+command = [f'{src_dir}/odoo{"-tmp" if "--tmp" in sys.argv else ""}/odoo-bin']
 odoo_bin_args = sys.argv[1:]
 extra_addons_paths = []
 
@@ -88,7 +88,7 @@ while i < len(odoo_bin_args):
 
 odoo_bin_args = filtered_args
 
-for arg in ['--internal', '--vscode', '--new', '--upgrade', '--enterprise', '-e']:
+for arg in ['--internal', '--vscode', '--new', '--upgrade', '--enterprise', '-e', '--tmp']:
     if arg in odoo_bin_args:
         odoo_bin_args.remove(arg)
 
@@ -107,12 +107,15 @@ else:
     dbname = generate_db_name()
     command += ['-d', dbname]
 
-os.chdir(f'{src_dir}/odoo')
+os.chdir(f'{src_dir}/odoo{"-tmp" if "--tmp" in sys.argv else ""}')
 
-addons_path = [f'{src_dir}/odoo/addons']
+addons_path = [
+    f'{src_dir}/odoo{"-tmp" if "--tmp" in sys.argv else ""}/addons',
+    f'{src_dir}/scripts/addons',
+]
 if '--enterprise' in sys.argv or '-e' in sys.argv:
-    addons_path = [f'{src_dir}/enterprise',
-                   f'{src_dir}/design-themes', f'{src_dir}/odoo/addons']
+    addons_path += [f'{src_dir}/enterprise{"-tmp" if "--tmp" in sys.argv else ""}',
+                   f'{src_dir}/design-themes']
 if '--internal' in sys.argv:
     addons_path += [f'{src_dir}/internal/private', f'{src_dir}/internal/trial',
                     f'{src_dir}/internal/demo', f'{src_dir}/internal/default']
@@ -120,6 +123,9 @@ if '--internal' in sys.argv:
 addons_path += extra_addons_paths
 
 command += [f'--addons-path={",".join(addons_path)}']
+
+if '--tmp' in sys.argv:
+    command += ['-p', '8070']
 
 if '--upgrade' in sys.argv:
     upgrade_path = [f'{src_dir}/upgrade-util/src',
