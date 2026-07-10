@@ -1,12 +1,24 @@
 {
-	"folders": [
-		{
-			"path": "odoo"
-		},
-		{
-			"path": "enterprise"
-		}
-	],
+    "folders": [
+        {
+            "path": "odoo"
+        },
+        {
+            "path": "enterprise"
+        },
+        {
+            "path": "internal"
+        },
+        {
+            "path": "upgrade"
+        },
+        {
+            "path": "design-themes"
+        },
+        {
+            "path": "scripts"
+        }
+    ],
     "settings": {
         "python.defaultInterpreterPath": "~/src/venv/bin/python3",
         "python.analysis.extraPaths": [
@@ -15,7 +27,13 @@
             "~/src",
         ],
         "git.ignoreLimitWarning": true,
-        "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+        "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+        "[css]": {
+            "editor.defaultFormatter": "vscode.css-language-features"
+        },
+        "[scss]": {
+            "editor.defaultFormatter": "vscode.css-language-features"
+        }
     },
     "launch": {
         "version": "0.2.0",
@@ -36,6 +54,73 @@
                     }
                 ]
             },
+        ]
+    },
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "Install Current Module",
+                "type": "shell",
+                "command": "bash",
+                "args": [
+                    "-ic",
+                    "install_current_module \"${file}\""
+                ],
+                "presentation": {
+                    "reveal": "silent",
+                    "panel": "shared"
+                },
+                "problemMatcher": []
+            },
+            {
+                "label": "Open odoo with admin",
+                "type": "shell",
+                "command": "python3 -m webbrowser 'http://localhost:8069/dev/autologin?to=/odoo?debug=assets'",
+                "group": "none",
+                "presentation": {
+                    "reveal": "never",
+                    "panel": "shared",
+                    "close": true
+                },
+                "problemMatcher": []
+            },
+            {
+                "label": "Open odoo website",
+                "type": "shell",
+                "command": "python3 -m webbrowser 'http://localhost:8069/dev/autologin?to=/odoo/website?debug=assets'",
+                "group": "none",
+                "presentation": {
+                    "reveal": "never",
+                    "panel": "shared",
+                    "close": true
+                },
+                "problemMatcher": []
+            },
+            {
+                "label": "Open odoo with demo",
+                "type": "shell",
+                "command": "python3 -m webbrowser 'http://demo.localhost:8069/dev/autologin?to=/odoo?debug=assets'",
+                "group": "none",
+                "presentation": {
+                    "reveal": "never",
+                    "panel": "shared",
+                    "close": true
+                },
+                "problemMatcher": []
+            },
+            {
+                "label": "hoot: Open Odoo Tests",
+                "type": "shell",
+                "command": "python3 -m webbrowser 'http://localhost:8069/dev/autologin?to=/web/tests?debug=assets'",
+                "group": "none",
+                "presentation": {
+                    "reveal": "never",
+                    "panel": "shared",
+                    "close": true
+                },
+                "problemMatcher": []
+            }
         ]
     }
 }
