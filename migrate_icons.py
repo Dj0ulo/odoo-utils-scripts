@@ -18,11 +18,19 @@ Patterns handled (across .xml, .js, .ts, .py, .scss, .css files):
     icon="oi-OLDNAME"  (or "oi oi-OLDNAME")
       → icon="NEW_NAME"
 
+    'icon': 'fa fa-ICON'  (dict entry in options="..."/view-info dicts)
+      → 'icon': 'MATERIAL'  [+ , 'icon_class': 'oi-filled' when needed]
+
   In JS/TS:
-    icon: "fa fa-ICON"  →  icon: "MATERIAL"
+    icon: "fa fa-NAME"  →  icon: "MATERIAL"
     icon: "oi oi-ICON"  →  icon: "MATERIAL"
+    Standalone icon strings (return "fa fa-NAME", badgeIcon: "fa-NAME",
+      export const X = "fa-NAME", cond ? "fa fa-a" : "fa fa-b")  →  "MATERIAL"
+      (skipped on classList/className manipulation lines and class-map object keys)
     .fa-ICON (CSS selector)  →  [data-icon='MATERIAL']
     .oi-ICON (CSS selector)  →  [data-icon='NEW']
+    In tests: expect(sel).toHaveClass("fa-ICON")
+      →  expect(sel).toHaveAttribute("data-icon", "MATERIAL")
 
   In Python:
     'iconClass': 'fa-ICON'  →  'icon': 'MATERIAL'
@@ -752,6 +760,50 @@ def _rewrite_icon_attrs(content: str) -> str:
     return _ICON_ATTR_RE.sub(_icon_attr_sub, content)
 
 
+# Dict-style icon entries found inside XML attribute values, e.g.
+#   options="{'icon': 'fa fa-users'}"
+#   onSwipeRight="... icon: 'fa-times-circle', ..."
+# and Python-in-XML view info dicts. The key may be quoted ('icon') or bare
+# (icon:). Produces:  'icon': 'MATERIAL'[, 'icon_class': 'oi-filled']
+_DICT_ICON_RE = re.compile(
+    r"""(?<![\w-])(?P<kq>['"]?)icon(?P=kq)(?P<sep>\s*:\s*)(?P<vq>['"])(?P<val>(?:fa|oi)[\w\s-]*)(?P=vq)"""
+)
+
+
+def _dict_icon_sub(m: "re.Match") -> str:
+    kq = m.group("kq")
+    vq = m.group("vq")
+    val = m.group("val")
+    parts = val.split()
+
+    material: str | None = None
+    needs_filled = False
+
+    # Old oi-OLDNAME icon class takes precedence when present
+    for p in parts:
+        if p.startswith("oi-") and p[3:] in OI_CLASS_TO_DATAICON:
+            material, needs_filled = OI_CLASS_TO_DATAICON[p[3:]]
+            break
+    if material is None:
+        for p in parts:
+            if p.startswith("fa-") and p[3:] in FA_TO_MATERIAL:
+                material, needs_filled = FA_TO_MATERIAL[p[3:]]
+                break
+
+    if material is None:
+        return m.group(0)
+
+    result = f"{kq}icon{kq}: {vq}{material}{vq}"
+    if needs_filled:
+        result += f", 'icon_class': {vq}oi-filled{vq}"
+    return result
+
+
+def _rewrite_dict_icons(content: str) -> str:
+    """Rewrite dict-style 'icon': 'fa fa-xxx' entries (in XML/Python)."""
+    return _DICT_ICON_RE.sub(_dict_icon_sub, content)
+
+
 # ---------------------------------------------------------------------------
 # JS / TS: icon property strings and CSS selectors
 # ---------------------------------------------------------------------------
@@ -827,6 +879,133 @@ def _css_sel_fa_fa_sub(m: re.Match) -> str:
     if name in FA_TO_MATERIAL:
         return f"[data-icon='{FA_TO_MATERIAL[name][0]}']"
     return m.group(0)
+
+
+# ---------------------------------------------------------------------------
+# JS: standalone icon string constants
+# e.g.  return "fa fa-phone";  |  badgeIcon: "fa fa-exclamation"
+#       export const X = "fa-play";  |  cond ? "fa fa-compress" : "fa fa-expand"
+# Any string literal whose whole content is a pure fa/oi icon spec (a single
+# mappable icon plus known utility modifiers) is replaced by the material name.
+# ---------------------------------------------------------------------------
+
+# fa-* modifier names that carry no icon meaning (kept out of the material name)
+_KNOWN_FA_MODS = (
+    set(FA_UTIL_TO_OI)
+    | {k[3:] for k in _FA_SIZE_TO_OI}
+    | {"inverse", "sm", "xs", "rotate-90", "rotate-180", "rotate-270",
+       "flip-horizontal", "flip-vertical", "border", "li", "pull-left",
+       "pull-right"}
+)
+
+
+def _pure_icon_string_to_material(s: str) -> str | None:
+    """Return the material/data-icon name if ``s`` is a pure icon class spec.
+
+    A pure spec contains the base prefix (fa/oi), exactly one mappable icon
+    class, and only known utility modifiers. Returns None otherwise (so strings
+    carrying unrelated classes such as ``text-danger`` are left untouched).
+    """
+    parts = s.split()
+    if not parts:
+        return None
+    icon: str | None = None
+    for tok in parts:
+        if tok in ("fa", "oi"):
+            continue
+        if tok.startswith("fa-"):
+            name = tok[3:]
+            if name in FA_TO_MATERIAL:
+                if icon is not None:
+                    return None
+                icon = FA_TO_MATERIAL[name][0]
+            elif name in _KNOWN_FA_MODS:
+                continue
+            else:
+                return None
+        elif tok.startswith("oi-"):
+            name = tok[3:]
+            if name in OI_CLASS_TO_DATAICON:
+                if icon is not None:
+                    return None
+                icon = OI_CLASS_TO_DATAICON[name][0]
+            elif tok in OI_UTIL_CLASSES:
+                continue
+            else:
+                return None
+        else:
+            return None
+    return icon
+
+
+_JS_STRING_RE = re.compile(r'"(?:[^"\\\n]|\\.)*"|\'(?:[^\'\\\n]|\\.)*\'')
+
+
+def _js_pure_icon_string_sub(m: re.Match) -> str:
+    lit = m.group(0)
+    quote = lit[0]
+    inner = lit[1:-1]
+    material = _pure_icon_string_to_material(inner)
+    if material is None:
+        return lit
+    return f"{quote}{material}{quote}"
+
+
+# Lines doing DOM class manipulation must keep the literal fa-* class name
+# (e.g. classList.toggle("fa-star")), so the icon string is not rewritten there.
+_CLASS_MANIP_RE = re.compile(r'\bclassList\b|\b(?:hasClass|toggleClass|addClass|removeClass)\(')
+
+
+def _rewrite_pure_icon_strings(content: str) -> str:
+    """Replace standalone icon-only string literals with their material name."""
+
+    def sub(m: re.Match) -> str:
+        start = m.start()
+        end = m.end()
+        line_start = content.rfind("\n", 0, start) + 1
+        line_end = content.find("\n", start)
+        line = content[line_start: line_end if line_end != -1 else len(content)]
+        if _CLASS_MANIP_RE.search(line):
+            return m.group(0)
+        # Skip object keys used as class-toggle maps, e.g. t-att-class:
+        #   { "fa-arrows-alt": !fullscreen, "fa-compress": fullscreen }
+        # where the literal is a class name, not an icon value. A key is a string
+        # followed by ':' and preceded by a property boundary ('{', ',', '('),
+        # whereas a ternary branch is preceded by '?' or ':' and must be converted.
+        p = start - 1
+        while p >= 0 and content[p] in " \t\r\n":
+            p -= 1
+        prev = content[p] if p >= 0 else ""
+        q = end
+        while q < len(content) and content[q] in " \t\r\n":
+            q += 1
+        nxt = content[q] if q < len(content) else ""
+        if nxt == ":" and prev in "{,(":
+            return m.group(0)
+        return _js_pure_icon_string_sub(m)
+
+    return _JS_STRING_RE.sub(sub, content)
+
+
+# JS tests: expect(sel).toHaveClass("fa-check") → toHaveAttribute("data-icon", "check")
+_TO_HAVE_CLASS_RE = re.compile(
+    r'\btoHaveClass\((["\'])((?:fa )?fa-[\w-]+)\1\)'
+)
+
+
+def _to_have_class_sub(m: re.Match) -> str:
+    val = m.group(2)
+    name = val.split()[-1][3:]
+    if name in FA_TO_MATERIAL:
+        material = FA_TO_MATERIAL[name][0]
+        if material.startswith("oi_"):
+            return m.group(0)
+        return f'toHaveAttribute("data-icon", "{material}")'
+    return m.group(0)
+
+
+def _rewrite_tohaveclass(content: str) -> str:
+    return _TO_HAVE_CLASS_RE.sub(_to_have_class_sub, content)
 
 
 # ---------------------------------------------------------------------------
@@ -920,9 +1099,10 @@ _S_RATING_DATA_ICON_SIMPLE_RE = re.compile(
 )
 
 
-def transform_xml(content: str) -> str:
+def transform_xml(content: str, path: "Path | None" = None) -> str:
     content = _rewrite_tags(content)
     content = _rewrite_icon_attrs(content)
+    content = _rewrite_dict_icons(content)
     content = _S_RATING_DATA_ICON_SIMPLE_RE.sub(
         lambda m: m.group(1) + f'data-rating-icon="{m.group(2)}"', content
     )
@@ -1011,7 +1191,10 @@ def _rewrite_css_selectors_in_js(content: str) -> str:
     return ''.join(result)
 
 
-def transform_js(content: str) -> str:
+def transform_js(content: str, path: "Path | None" = None) -> str:
+    is_test = bool(path) and (
+        ".test." in path.name or "tests" in path.parts or "test" in path.parts
+    )
     # Embedded HTML in template literals / markup`` helpers
     content = _rewrite_tags(content)
     content = _rewrite_icon_attrs(content)
@@ -1021,10 +1204,17 @@ def transform_js(content: str) -> str:
     # CSS selectors in test helpers (contains(".fa-close"), etc.)
     # Context-aware to avoid quote conflicts inside single/double quoted strings
     content = _rewrite_css_selectors_in_js(content)
+    if is_test:
+        # toHaveClass("fa-x") assertions become data-icon attribute checks.
+        content = _rewrite_tohaveclass(content)
+    else:
+        # Standalone icon string constants (return "fa fa-x", badgeIcon: "fa-x"…).
+        # Skipped in tests where a bare class string is asserted, not rendered.
+        content = _rewrite_pure_icon_strings(content)
     return content
 
 
-def transform_python(content: str) -> str:
+def transform_python(content: str, path: "Path | None" = None) -> str:
     # Embedded HTML in Markup()
     content = _rewrite_tags(content)
     # Python dict icon entries
@@ -1034,7 +1224,7 @@ def transform_python(content: str) -> str:
     return content
 
 
-def transform_scss(content: str) -> str:
+def transform_scss(content: str, path: "Path | None" = None) -> str:
     content = _SCSS_IFA_RE.sub("i.oi", content)
     content = _SCSS_DOT_FA_RE.sub(".oi", content)
     content = _SCSS_SEL_FA_RE.sub(_scss_sel_fa, content)
@@ -1069,7 +1259,7 @@ def process_file(path: Path, check_only: bool = False) -> bool:
         print(f"  ERROR reading {path}: {e}", file=sys.stderr)
         return False
 
-    transformed = transformer(original)
+    transformed = transformer(original, path)
 
     if transformed == original:
         return False
@@ -1191,7 +1381,9 @@ def main() -> None:
         # Get stuck at that file for some reason
         'addons/web/static/src/webclient/icons.scss',
         'addons/html_editor/static/tests/odoo_icons.test.js',
+        'addons/html_editor/static/tests/icon.test.js',
         'addons/base_setup/tests/test_res_config_doc_links.py',
+        'addons/html_editor/static/src/main/legacy_icon_migration_plugin.js',
     )
     print(f"Processing {len(files)} files...\n")
     for f in sorted(set(files)):
