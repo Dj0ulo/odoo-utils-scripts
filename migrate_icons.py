@@ -28,6 +28,9 @@ Patterns handled (across .xml, .js, .ts, .py, .scss, .css files):
       export const X = "fa-NAME", cond ? "fa fa-a" : "fa fa-b")  →  "MATERIAL"
       (skipped on classList/className manipulation lines and class-map object keys)
     .fa-ICON (CSS selector)  →  [data-icon='MATERIAL']
+      (when MATERIAL is reachable from both a filled and non-filled fa class,
+       the selector is disambiguated: fa-star → [data-icon='star'].oi-filled,
+       fa-star-o → [data-icon='star']:not(.oi-filled))
     .oi-ICON (CSS selector)  →  [data-icon='NEW']
     In tests: expect(sel).toHaveClass("fa-ICON")
       →  expect(sel).toHaveAttribute("data-icon", "MATERIAL")
@@ -40,7 +43,8 @@ Patterns handled (across .xml, .js, .ts, .py, .scss, .css files):
 
   In SCSS/CSS:
     i.fa { → i.oi {
-    .fa-ICON (selector) → [data-icon='MATERIAL']
+    .fa-ICON (selector) → [data-icon='MATERIAL']  (+ .oi-filled / :not(.oi-filled)
+       when the material is shared by a filled and non-filled fa class)
     .oi-ICON (selector) → [data-icon='NEW']
 
 Usage:
@@ -113,6 +117,38 @@ def _parse_fa_to_material_mapping() -> dict[str, tuple[str, bool]]:
 
 
 FA_TO_MATERIAL: dict[str, tuple[str, bool]] = _parse_fa_to_material_mapping()
+
+
+def _compute_ambiguous_filled_materials() -> frozenset[str]:
+    """Material names reachable from BOTH a filled and a non-filled fa-* source.
+
+    e.g. fa-star → (star, filled) and fa-star-o → (star, not filled). For these,
+    a bare ``[data-icon='NAME']`` selector cannot tell the two apart, so
+    CSS-selector rewrites must append ``.oi-filled`` / ``:not(.oi-filled)`` to
+    preserve the fa-x vs fa-x-o distinction. Icons that are never filled (or
+    never outlined) stay ambiguity-free so we don't emit noise.
+    """
+    filled_flags: dict[str, set[bool]] = {}
+    for material, needs_filled in FA_TO_MATERIAL.values():
+        filled_flags.setdefault(material, set()).add(needs_filled)
+    return frozenset(
+        material for material, flags in filled_flags.items() if flags == {True, False}
+    )
+
+
+_AMBIGUOUS_FILLED_MATERIALS: frozenset[str] = _compute_ambiguous_filled_materials()
+
+
+def _fa_filled_suffix(fa_name: str) -> str:
+    """CSS-selector suffix disambiguating a fa-* icon by its filled state.
+
+    Returns ``.oi-filled`` / ``:not(.oi-filled)`` when the target material icon
+    is ambiguous (produced by both a filled and non-filled fa-* class), else ''.
+    """
+    material, needs_filled = FA_TO_MATERIAL[fa_name]
+    if material in _AMBIGUOUS_FILLED_MATERIALS:
+        return ".oi-filled" if needs_filled else ":not(.oi-filled)"
+    return ""
 
 # ---------------------------------------------------------------------------
 # MAPPING: old oi-CLASSNAME → (new data-icon value, needs_oi_filled)
@@ -345,9 +381,66 @@ _TAG_ML_RE = re.compile(
 )
 
 _CLASS_ATTR_RE = re.compile(r'\bclass=(["\'])(.*?)\1', re.DOTALL)
+# Static class= only (negative lookbehind avoids matching t-att-class/t-attf-class).
+_STATIC_CLASS_ATTR_RE = re.compile(r'(?<![-\w])class=(["\'])(.*?)\1', re.DOTALL)
 _DATA_ICON_RE = re.compile(r'\b(?:data-icon|t-att-data-icon|t-attf-data-icon)\s*=')
 _T_ATT_CLASS_RE = re.compile(r'\bt-att-class=(["\'])(.*?)\1', re.DOTALL)
 _T_ATTF_CLASS_RE = re.compile(r'\bt-attf-class=(["\'])(.*?)\1', re.DOTALL)
+
+# ---------------------------------------------------------------------------
+# LEFTOVER FA-UTILITY CLEANUP
+# fa-fw / fa-spin / fa-lg … are modifiers, never icon names. When an element
+# already renders through the oi system (it has a data-icon attribute or an
+# `oi`/`oi-*` class token), any leftover fa-* modifier — and a bare `fa` base —
+# should become its oi- form. Elements that deliberately keep rendering
+# FontAwesome (e.g. t-if="icon.startsWith('fa')") carry no such signal and are
+# left untouched, so we never break an intentionally-FA icon.
+# ---------------------------------------------------------------------------
+
+# Modifier names (without the fa-/oi- prefix). Longest first so e.g. "stack-1x"
+# is tried before "stack" in the alternation.
+_FA_MOD_NAMES = sorted(
+    set(FA_UTIL_TO_OI) | {"sm", "xs"}, key=len, reverse=True
+)
+_FA_MOD_TOKEN_RE = re.compile(
+    r'(?<![\w-])fa-(' + '|'.join(re.escape(n) for n in _FA_MOD_NAMES) + r')(?![\w-])'
+)
+# A standalone `oi` or `oi-*` class token anywhere in the tag.
+_OI_SIGNAL_RE = re.compile(r'(?<![\w-])oi(?:-[\w]+)?(?![\w-])')
+
+
+def _normalize_oi_utils_in_tag(tag: str) -> str:
+    """Rewrite leftover fa-* modifiers to oi-* on oi-system elements.
+
+    Only runs when the tag carries an oi signal (a data-icon attribute or an
+    oi/oi-* class token). Then:
+      1. every fa-<modifier> token (anywhere in the tag) becomes oi-<modifier>;
+      2. in the static class= attribute, a bare `fa` base becomes `oi` (when no
+         fa-ICON class remains) and duplicate oi utility classes are dropped.
+    """
+    if not (_DATA_ICON_RE.search(tag) or _OI_SIGNAL_RE.search(tag)):
+        return tag
+
+    tag = _FA_MOD_TOKEN_RE.sub(lambda m: "oi-" + m.group(1), tag)
+
+    cm = _STATIC_CLASS_ATTR_RE.search(tag)
+    if cm and "{" not in cm.group(2):
+        quote = cm.group(1)
+        tokens = cm.group(2).split()
+        if "fa" in tokens and not any(t.startswith("fa-") for t in tokens):
+            tokens = ["oi" if t == "fa" else t for t in tokens]
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for t in tokens:
+            if t in OI_UTIL_CLASSES and t in seen:
+                continue
+            seen.add(t)
+            deduped.append(t)
+        new_val = " ".join(deduped)
+        if new_val != cm.group(2):
+            tag = tag[:cm.start()] + f"class={quote}{new_val}{quote}" + tag[cm.end():]
+
+    return tag
 
 
 def _convert_static_fa_classes_to_oi(class_val: str) -> str | None:
@@ -652,6 +745,9 @@ def _rewrite_tag(tag: str) -> str:
     # Handle t-attf-class= (QWeb interpolated class attributes)
     tag = _rewrite_tattf_class_in_tag(tag)
 
+    # Clean up leftover fa-* utility classes on oi-system elements.
+    tag = _normalize_oi_utils_in_tag(tag)
+
     return tag
 
 
@@ -860,7 +956,7 @@ _CSS_SEL_FA_FA_RE = re.compile(r'\.fa\.fa-([\w-]+)')
 def _css_sel_fa_sub(m: re.Match) -> str:
     name = m.group(1)
     if name in FA_TO_MATERIAL:
-        return f"[data-icon='{FA_TO_MATERIAL[name][0]}']"
+        return f"[data-icon='{FA_TO_MATERIAL[name][0]}']{_fa_filled_suffix(name)}"
     if name in FA_UTIL_TO_OI:
         return f".{FA_UTIL_TO_OI[name]}"
     return m.group(0)
@@ -877,7 +973,7 @@ def _css_sel_fa_fa_sub(m: re.Match) -> str:
     """Replace .fa.fa-xxx with [data-icon='material'] (used in chained selectors)."""
     name = m.group(1)
     if name in FA_TO_MATERIAL:
-        return f"[data-icon='{FA_TO_MATERIAL[name][0]}']"
+        return f"[data-icon='{FA_TO_MATERIAL[name][0]}']{_fa_filled_suffix(name)}"
     return m.group(0)
 
 
@@ -1078,7 +1174,7 @@ _SCSS_SEL_OI_RE = re.compile(r'(?<!["\'])\.oi-([\w-]+)')
 def _scss_sel_fa(m: re.Match) -> str:
     name = m.group(1)
     if name in FA_TO_MATERIAL:
-        return f"[data-icon='{FA_TO_MATERIAL[name][0]}']"
+        return f"[data-icon='{FA_TO_MATERIAL[name][0]}']{_fa_filled_suffix(name)}"
     return m.group(0)
 
 
@@ -1165,13 +1261,13 @@ def _rewrite_css_selectors_in_js(content: str) -> str:
         def _fa_fa_sub_q(m2: re.Match) -> str:
             name = m2.group(1)
             if name in FA_TO_MATERIAL:
-                return f"[data-icon={attr_q}{FA_TO_MATERIAL[name][0]}{attr_q}]"
+                return f"[data-icon={attr_q}{FA_TO_MATERIAL[name][0]}{attr_q}]{_fa_filled_suffix(name)}"
             return m2.group(0)
 
         def _fa_sub_q(m2: re.Match) -> str:
             name = m2.group(1)
             if name in FA_TO_MATERIAL:
-                return f"[data-icon={attr_q}{FA_TO_MATERIAL[name][0]}{attr_q}]"
+                return f"[data-icon={attr_q}{FA_TO_MATERIAL[name][0]}{attr_q}]{_fa_filled_suffix(name)}"
             if name in FA_UTIL_TO_OI:
                 return f".{FA_UTIL_TO_OI[name]}"
             return m2.group(0)
@@ -1373,9 +1469,16 @@ def main() -> None:
         return
 
     changed = 0
-    blacklist_dirs = (
+    # Single path components matched against each part of a path.
+    blacklist_dir_names = (
         'node_modules',
         'spreadsheet',
+    )
+    # Multi-segment path fragments matched as substrings of the full path.
+    # (f.parts holds individual components, so these must be matched separately.)
+    blacklist_dir_paths = (
+        'documents_spreadsheet/static/tests',
+        'spreadsheet_edition/static/tests',
     )
     blacklist_files = (
         # Get stuck at that file for some reason
@@ -1386,12 +1489,26 @@ def main() -> None:
         'addons/html_editor/static/src/main/legacy_icon_migration_plugin.js',
     )
     print(f"Processing {len(files)} files...\n")
+    skipped_in_dirs = 0
     for f in sorted(set(files)):
-        if any(part in blacklist_dirs for part in f.parts) or str(f).endswith(blacklist_files):
+        posix = f.as_posix()
+        in_blacklisted_dir = (
+            any(part in blacklist_dir_names for part in f.parts)
+            or any(frag in posix for frag in blacklist_dir_paths)
+        )
+        if in_blacklisted_dir:
+            # Files inside blacklisted directories are skipped silently
+            # (printing each one pollutes the output); report a count instead.
+            skipped_in_dirs += 1
+            continue
+        if posix.endswith(blacklist_files):
             print(f"Skipping blacklisted file {f}...")
             continue
         if process_file(f, check_only=args.check):
             changed += 1
+
+    if skipped_in_dirs:
+        print(f"Skipped {skipped_in_dirs} files in blacklisted directories.")
 
     action = "would be changed" if args.check else "changed"
     print(f"\n{changed}/{len(files)} files {action}.")
