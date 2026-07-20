@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""
+debug_tour <tour_name> [-i] [-r]
+
+Prepare (or revert with -r) the environment to debug a web tour:
+  - find the `start_tour(url, '<tour_name>', ...)` call in ~/src/odoo and
+    ~/src/enterprise and add `debug=True` to it
+  - comment out the `debugger;` used to open devtools at tour start in
+    addons/web_tour/static/src/js/tour_automatic/tour_automatic.js
+  - open (in VS Code) the JS file defining the tour, at the definition line
+  - run `odoo [-e] [-i <module>] --test-tags .<test_method>`
+    (`-i <module>` is only added when the script is called with -i)
+
+With -r, the opposite is done for the file edits (if present).
+"""
+import os
+import re
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+ODOO = os.path.join(HOME, "src/odoo")
+ENTERPRISE = os.path.join(HOME, "src/enterprise")
+SEARCH_ROOTS = [ODOO, ENTERPRISE]
+TOUR_AUTOMATIC = os.path.join(
+    ODOO, "addons/web_tour/static/src/js/tour_automatic/tour_automatic.js"
+)
+# The block that fires a debugger to let you configure devtools at tour start.
+DEBUGGER_COMMENT = "// Starts the tour with a debugger to allow you to choose devtools configuration."
+
+
+def fail(msg):
+    print(f"error: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def grep_files(pattern, roots):
+    """Return list of files matching pattern (python-flavoured extended regex)."""
+    files = set()
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        try:
+            out = subprocess.run(
+                ["grep", "-rlE", "--include=*.py", pattern, root],
+                capture_output=True, text=True,
+            )
+            files.update(f for f in out.stdout.splitlines() if f)
+        except FileNotFoundError:
+            fail("`grep` is required but was not found")
+    return sorted(files)
+
+
+def find_start_tour_call(tour_name):
+    """Find the python file, call span and content holding the start_tour call.
+
+    Returns (path, content, match) where match spans from `start_tour(` up to and
+    including the closing quote of the tour name argument.
+    """
+    name_re = re.escape(tour_name)
+    # start_tour ( <url arg> , '<tour_name>'
+    call_re = re.compile(
+        r"start_tour\s*\(\s*[^,()]+,\s*(['\"])" + name_re + r"\1",
+        re.DOTALL,
+    )
+    candidates = grep_files(r"start_tour", SEARCH_ROOTS)
+    matches = []
+    for path in candidates:
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for m in call_re.finditer(content):
+            matches.append((path, content, m))
+    if not matches:
+        fail(f"no start_tour call found for tour {tour_name!r}")
+    if len(set(m[0] for m in matches)) > 1:
+        print("warning: start_tour found in several files, using the first:")
+        for p in sorted(set(m[0] for m in matches)):
+            print(f"  {p}")
+    return matches[0]
+
+
+def enclosing_test_method(content, pos):
+    """Name of the nearest `def ...(` defined before position `pos`."""
+    last = None
+    for m in re.finditer(r"^\s*def\s+(\w+)\s*\(", content[:pos], re.MULTILINE):
+        last = m.group(1)
+    if not last:
+        fail("could not find the enclosing test method")
+    return last
+
+
+def module_of(path):
+    """Module name = directory containing a __manifest__.py, walking up from path."""
+    d = os.path.dirname(os.path.abspath(path))
+    while d and d != "/":
+        if os.path.exists(os.path.join(d, "__manifest__.py")):
+            return os.path.basename(d)
+        d = os.path.dirname(d)
+    fail(f"could not determine the module for {path}")
+
+
+def edit_start_tour(path, content, match, revert):
+    end = match.end()  # just after the closing quote of the tour name
+    already = re.match(r"\s*,\s*debug\s*=\s*True", content[end:])
+    if revert:
+        if not already:
+            print(f"start_tour: debug=True not present in {path} (skipped)")
+            return
+        new = content[:end] + content[end + already.end():]
+        action = "removed debug=True from"
+    else:
+        if already:
+            print(f"start_tour: debug=True already present in {path} (skipped)")
+            return
+        new = content[:end] + ", debug=True" + content[end:]
+        action = "added debug=True to"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new)
+    print(f"start_tour: {action} {path}")
+
+
+def edit_debugger(revert):
+    if not os.path.exists(TOUR_AUTOMATIC):
+        fail(f"{TOUR_AUTOMATIC} not found")
+    with open(TOUR_AUTOMATIC, encoding="utf-8") as f:
+        content = f.read()
+    # Match the `debugger;` line that follows the identifying comment.
+    prefix = (
+        r"(" + re.escape(DEBUGGER_COMMENT)
+        + r"\n\s*// eslint-disable-next-line no-debugger\n(\s*))"
+    )
+    if revert:
+        pat = re.compile(prefix + r"//\s*debugger;")
+        repl = r"\1debugger;"
+        done, skip = "uncommented debugger;", "debugger; is not commented (skipped)"
+    else:
+        pat = re.compile(prefix + r"debugger;")
+        repl = r"\1// debugger;"
+        done, skip = "commented debugger;", "debugger; is already commented (skipped)"
+    new, n = pat.subn(repl, content)
+    if not n:
+        print(f"tour_automatic.js: {skip}")
+        return
+    with open(TOUR_AUTOMATIC, "w", encoding="utf-8") as f:
+        f.write(new)
+    print(f"tour_automatic.js: {done}")
+
+
+def find_tour_definition(tour_name):
+    """Return (path, line) of the JS `web_tour.tours").add('<tour_name>'`."""
+    name_re = re.escape(tour_name)
+    add_re = re.compile(
+        r'web_tour\.tours"\)\.add\(\s*(["\'])' + name_re + r"\1", re.DOTALL
+    )
+    files = set()
+    for root in SEARCH_ROOTS:
+        if not os.path.isdir(root):
+            continue
+        out = subprocess.run(
+            ["grep", "-rlE", "--include=*.js", r'web_tour\.tours"\)\.add\(', root],
+            capture_output=True, text=True,
+        )
+        files.update(f for f in out.stdout.splitlines() if f)
+    for path in sorted(files):
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+        except (UnicodeDecodeError, OSError):
+            continue
+        m = add_re.search(content)
+        if m:
+            line = content.count("\n", 0, m.start()) + 1
+            return path, line
+    return None, None
+
+
+def main():
+    flags = ("-r", "--revert", "-i", "--install")
+    args = [a for a in sys.argv[1:] if a not in flags]
+    revert = any(a in ("-r", "--revert") for a in sys.argv[1:])
+    install = any(a in ("-i", "--install") for a in sys.argv[1:])
+    if len(args) != 1:
+        print(__doc__.strip())
+        sys.exit(1)
+    tour_name = args[0]
+
+    path, content, match = find_start_tour_call(tour_name)
+    test_method = enclosing_test_method(content, match.start())
+    module = module_of(path)
+    is_enterprise = os.path.abspath(path).startswith(os.path.abspath(ENTERPRISE))
+
+    # 1 & 2. edit the source files
+    edit_start_tour(path, content, match, revert)
+    edit_debugger(revert)
+
+    if revert:
+        print("\nRevert done.")
+        return
+
+    # 3. open the tour definition in VS Code
+    js_path, js_line = find_tour_definition(tour_name)
+    if js_path:
+        print(f"tour definition: {js_path}:{js_line}")
+        try:
+            subprocess.run(["code", "-g", f"{js_path}:{js_line}"], check=False)
+        except FileNotFoundError:
+            print("warning: `code` command not found, skipping file open")
+    else:
+        print(f"warning: JS definition of tour {tour_name!r} not found")
+
+    # 4. run the tour
+    cmd = ["odoo"]
+    if is_enterprise:
+        cmd.append("-e")
+    if install:
+        cmd += ["-i", module]
+    cmd += ["--test-tags", f".{test_method}"]
+    print("\nrunning:", " ".join(cmd))
+    subprocess.call(cmd)
+
+
+if __name__ == "__main__":
+    main()
