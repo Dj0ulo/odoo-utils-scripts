@@ -1472,7 +1472,7 @@ def main() -> None:
     # Single path components matched against each part of a path.
     blacklist_dir_names = (
         'node_modules',
-        'spreadsheet',
+        'o_spreadsheet',
     )
     # Multi-segment path fragments matched as substrings of the full path.
     # (f.parts holds individual components, so these must be matched separately.)
