@@ -1,0 +1,653 @@
+#!/usr/bin/env node
+/**
+ * gitdiff.js — View a git commit as a beautiful diff page in your browser.
+ * Usage: node gitdiff.js <commit-hash>
+ */
+
+const { execSync } = require('child_process');
+const http = require('http');
+const { exec } = require('child_process');
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function run(cmd) {
+  try {
+    return execSync(cmd, { encoding: 'utf8' });
+  } catch (e) {
+    console.error('Error:', e.stderr || e.message);
+    process.exit(1);
+  }
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function getCommitData(hash) {
+  const fmt = '%H%n%an%n%ae%n%ai%n%s%n%b';
+  const raw = run(`git log -1 --format="${fmt}" ${hash}`);
+  const lines = raw.split('\n');
+  const fullHash   = lines[0].trim();
+  const authorName = lines[1].trim();
+  const authorEmail= lines[2].trim();
+  const date       = lines[3].trim();
+  const subject    = lines[4].trim();
+  const body       = lines.slice(5).join('\n').trim();
+  const message    = subject + (body ? '\n\n' + body : '');
+  return { hash: fullHash, short: fullHash.slice(0, 7), authorName, authorEmail, date, message };
+}
+
+function getDiff(hash) {
+  return run(`git diff ${hash}^ ${hash}`);
+}
+
+function parseDiff(rawDiff) {
+  const files = [];
+  let current = null;
+  for (const line of rawDiff.split('\n')) {
+    if (line.startsWith('diff --git ')) {
+      if (current) files.push(current);
+      const m = line.match(/diff --git a\/(.*) b\/(.*)/);
+      const name = m ? m[2] : 'unknown';
+      current = { name, lines: [], added: 0, removed: 0 };
+    } else if (!current) {
+      continue;
+    } else if (line.startsWith('--- ') || line.startsWith('+++ ') || line.startsWith('index ') || line.startsWith('@@')) {
+      current.lines.push({ type: 'meta', text: esc(line) });
+    } else if (line.startsWith('+')) {
+      current.added++;
+      current.lines.push({ type: 'added', text: esc(line.slice(1)) });
+    } else if (line.startsWith('-')) {
+      current.removed++;
+      current.lines.push({ type: 'removed', text: esc(line.slice(1)) });
+    } else {
+      current.lines.push({ type: 'context', text: esc(line.startsWith(' ') ? line.slice(1) : line) });
+    }
+  }
+  if (current) files.push(current);
+  return files;
+}
+
+// ── HTML builders ─────────────────────────────────────────────────────────────
+
+function buildFileListHtml(files) {
+  return files.map(f => `
+    <div class="file-item" data-file="${esc(f.name)}">
+      <span class="file-name" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="file-chips">
+        <span class="chip a">+${f.added}</span>
+        <span class="chip r">-${f.removed}</span>
+      </span>
+    </div>`).join('\n');
+}
+
+function buildDiffHtml(files) {
+  return files.map(f => {
+    let lnOld = 0, lnNew = 0;
+    const rows = f.lines.map(line => {
+      const { type, text } = line;
+      if (type === 'meta') {
+        const m = text.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (m) { lnOld = +m[1]; lnNew = +m[2]; }
+        return `<tr class="meta"><td class="ln"></td><td class="ln"></td><td class="code">${text}</td></tr>`;
+      } else if (type === 'added') {
+        lnNew++;
+        return `<tr class="added"><td class="ln"></td><td class="ln">${lnNew}</td><td class="code">${text}</td></tr>`;
+      } else if (type === 'removed') {
+        lnOld++;
+        return `<tr class="removed"><td class="ln">${lnOld}</td><td class="ln"></td><td class="code">${text}</td></tr>`;
+      } else {
+        lnOld++; lnNew++;
+        return `<tr class="context"><td class="ln">${lnOld}</td><td class="ln">${lnNew}</td><td class="code">${text}</td></tr>`;
+      }
+    }).join('');
+
+    const fid = esc(f.name);
+    return `
+    <div class="diff-file" id="file-${fid}" data-file="${fid}">
+      <div class="diff-file-header">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="fname">${esc(f.name)}</span>
+        <span style="margin-left:auto;font-size:10px;opacity:.5;">+${f.added} / -${f.removed}</span>
+      </div>
+      <table class="diff-table">${rows}</table>
+    </div>`;
+  }).join('\n');
+}
+
+function buildHtml(hash) {
+  const data  = getCommitData(hash);
+  const raw   = getDiff(hash);
+  const files = parseDiff(raw);
+
+  const subjectLine  = data.message.split('\n')[0];
+  const totalAdded   = files.reduce((s, f) => s + f.added,   0);
+  const totalRemoved = files.reduce((s, f) => s + f.removed, 0);
+  const authorInitial = data.authorName ? data.authorName[0].toUpperCase() : '?';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>commit ${esc(data.short)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161d;
+    --surface2: #1a1e28;
+    --border: #252933;
+    --border2: #2e3444;
+    --text: #c9d1e0;
+    --text-muted: #5a6378;
+    --text-dim: #7a8499;
+    --accent: #4f8ef7;
+    --accent-glow: rgba(79,142,247,.18);
+    --added-bg: #0d1f12;
+    --added-text: #4ade80;
+    --added-num: #1a3320;
+    --removed-bg: #1f0d10;
+    --removed-text: #f87171;
+    --removed-num: #331a1e;
+    --meta-text: #5a6a8a;
+    --highlight: rgba(253,224,71,.22);
+    --highlight-border: rgba(253,224,71,.7);
+    --sidebar-w: 300px;
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* ── header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 28px 18px;
+    flex-shrink: 0;
+  }
+  .commit-hash {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--accent);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    opacity: .85;
+  }
+  .commit-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .author-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 4px 12px 4px 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .author-avatar {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff;
+    flex-shrink: 0;
+  }
+  .commit-date { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+  .stats-badges { display: flex; gap: 8px; align-items: center; }
+  .stat { font-size: 11px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+  .stat.added   { color: var(--added-text); }
+  .stat.removed { color: var(--removed-text); }
+
+  /* ── message block ── */
+  .message-block {
+    padding: 14px 28px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .message-block::-webkit-scrollbar { width: 4px; }
+  .message-block::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* markdown */
+  .md h1,.md h2,.md h3 { font-family: 'Syne', sans-serif; color: var(--text); margin: .6em 0 .3em; }
+  .md h1 { font-size: 1.2em; font-weight: 800; }
+  .md h2 { font-size: 1.05em; font-weight: 700; }
+  .md h3 { font-size: .95em; font-weight: 600; }
+  .md p  { font-size: 13.5px; line-height: 1.7; color: var(--text); margin: .3em 0; }
+  .md code { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; background: var(--surface2); padding: 1px 5px; border-radius: 3px; color: #a78bfa; }
+  .md pre  { background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; padding: 10px 14px; overflow-x: auto; margin: .5em 0; }
+  .md pre code { background: none; color: var(--text); padding: 0; }
+  .md ul,.md ol { padding-left: 1.4em; font-size: 13.5px; color: var(--text); line-height: 1.7; }
+  .md li { margin: .15em 0; }
+  .md a  { color: var(--accent); text-decoration: none; }
+  .md a:hover { text-decoration: underline; }
+  .md blockquote { border-left: 3px solid var(--border2); margin: .4em 0; padding: .2em .8em; color: var(--text-dim); font-style: italic; }
+  .md strong { font-weight: 700; color: #e2e8f0; }
+
+  /* ── layout ── */
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sidebar-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .search-wrap { position: relative; }
+  .search-wrap svg {
+    position: absolute;
+    left: 9px; top: 50%;
+    transform: translateY(-50%);
+    opacity: .45;
+    pointer-events: none;
+  }
+  #search {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 7px 10px 7px 30px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--text);
+    outline: none;
+    transition: border-color .15s;
+  }
+  #search::placeholder { color: var(--text-muted); }
+  #search:focus { border-color: var(--accent); }
+  #search.error { border-color: var(--removed-text); }
+  .search-count {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    margin-top: 5px;
+    min-height: 14px;
+  }
+  .search-count.has-results { color: #fde047; }
+  .search-count.error { color: var(--removed-text); }
+
+  .file-list { overflow-y: auto; flex: 1; padding: 8px 0; }
+  .file-list::-webkit-scrollbar { width: 4px; }
+  .file-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .file-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 16px;
+    cursor: pointer;
+    font-size: 11.5px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    border-left: 2px solid transparent;
+    transition: background .1s, color .1s, border-color .1s;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .file-item:hover { background: var(--surface2); color: var(--text); }
+  .file-item.active { background: var(--accent-glow); color: var(--accent); border-left-color: var(--accent); }
+  .file-item.has-match { color: #fde047; }
+  .file-item.active.has-match { color: #fde047; }
+  .file-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .file-chips { display: flex; gap: 4px; flex-shrink: 0; }
+  .chip { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+  .chip.a { background: var(--added-num); color: var(--added-text); }
+  .chip.r { background: var(--removed-num); color: var(--removed-text); }
+
+  /* ── diff panel ── */
+  .diff-panel { flex: 1; overflow-y: auto; background: var(--bg); }
+  .diff-panel::-webkit-scrollbar { width: 6px; }
+  .diff-panel::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .diff-file {
+    margin: 20px 24px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    scroll-margin-top: 20px;
+  }
+  .diff-file-header {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .diff-file-header .fname { color: var(--text); font-weight: 500; }
+
+  table.diff-table { width: 100%; border-collapse: collapse; }
+  .diff-table td { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; white-space: pre; }
+  .diff-table td.ln {
+    width: 42px; min-width: 42px;
+    text-align: right;
+    padding: 0 10px;
+    color: var(--text-muted);
+    user-select: none;
+    border-right: 1px solid var(--border);
+  }
+  .diff-table td.code { padding: 0 14px; width: 100%; }
+
+  .diff-table tr.added   td { background: var(--added-bg); }
+  .diff-table tr.added   td.ln { background: var(--added-num); color: var(--added-text); opacity: .7; }
+  .diff-table tr.added   td.code { color: var(--added-text); }
+  .diff-table tr.removed td { background: var(--removed-bg); }
+  .diff-table tr.removed td.ln { background: var(--removed-num); color: var(--removed-text); opacity: .7; }
+  .diff-table tr.removed td.code { color: var(--removed-text); }
+  .diff-table tr.meta    td { background: var(--surface2); color: var(--meta-text); font-style: italic; }
+  .diff-table tr.context td.code { color: var(--text); }
+
+  .hl {
+    background: var(--highlight);
+    outline: 1px solid var(--highlight-border);
+    border-radius: 2px;
+    color: #fde047;
+  }
+  .hl.active-match {
+    background: rgba(253,224,71,.45);
+    outline: 2px solid #fde047;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="commit-hash">commit &nbsp;${esc(data.hash)}</div>
+  <div style="font-size:18px;font-weight:800;color:#e2e8f0;line-height:1.3;margin-bottom:10px;">${esc(subjectLine)}</div>
+  <div class="commit-meta">
+    <div class="author-badge">
+      <div class="author-avatar">${authorInitial}</div>
+      ${esc(data.authorName)} &lt;${esc(data.authorEmail)}&gt;
+    </div>
+    <div class="commit-date">${esc(data.date)}</div>
+    <div class="stats-badges">
+      <span class="stat added">+${totalAdded}</span>
+      <span class="stat removed">-${totalRemoved}</span>
+    </div>
+  </div>
+</header>
+
+<div class="message-block">
+  <div class="md" id="commit-message"></div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">Changed files · ${files.length}</div>
+      <div class="search-wrap">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="search" type="text" placeholder="regex search in diff…" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="search-count" id="search-count"></div>
+    </div>
+    <div class="file-list" id="file-list">
+      ${buildFileListHtml(files)}
+    </div>
+  </aside>
+
+  <main class="diff-panel" id="diff-panel">
+    ${buildDiffHtml(files)}
+  </main>
+</div>
+
+<script>
+const FILES = ${JSON.stringify(files)};
+
+// ── tiny markdown renderer ────────────────────────────────────────────────────
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMarkdown(md) {
+  if (!md.trim()) return '';
+  let html = md
+    .replace(/\`\`\`(\\w*)\\n?([\\s\\S]*?)\`\`\`/g, (_, lang, code) =>
+      '<pre><code>' + escHtml(code.trim()) + '</code></pre>')
+    .replace(/\`([^\`]+)\`/g, (_, c) => '<code>' + escHtml(c) + '</code>')
+    .replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+    .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/^\\s*[-*] (.+)$/gm, '<li>$1</li>')
+    .replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>')
+    .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2">$1</a>')
+    .replace(/\\n\\n+/g, '</p><p>');
+  return '<p>' + html + '</p>';
+}
+
+document.getElementById('commit-message').innerHTML = renderMarkdown(${JSON.stringify(data.message)});
+
+// ── search ────────────────────────────────────────────────────────────────────
+const searchInput = document.getElementById('search');
+const searchCount = document.getElementById('search-count');
+let currentRegex = null;
+let allMatches = [];
+let matchIndex = 0;
+
+function escHtmlInline(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function clearHighlights() {
+  document.querySelectorAll('.hl').forEach(el => {
+    const parent = el.parentNode;
+    parent.replaceChild(document.createTextNode(el.textContent), el);
+    parent.normalize();
+  });
+}
+
+function highlightAll(regex) {
+  allMatches = [];
+  document.querySelectorAll('#diff-panel td.code').forEach(cell => {
+    const text = cell.textContent;
+    regex.lastIndex = 0;
+    if (!regex.test(text)) return;
+    regex.lastIndex = 0;
+    let html = '', last = 0, m;
+    while ((m = regex.exec(text)) !== null) {
+      html += escHtmlInline(text.slice(last, m.index));
+      html += '<span class="hl" data-match-idx="' + allMatches.length + '">' + escHtmlInline(m[0]) + '</span>';
+      allMatches.push(allMatches.length);
+      last = m.index + m[0].length;
+      if (m[0].length === 0) regex.lastIndex++;
+    }
+    html += escHtmlInline(text.slice(last));
+    cell.innerHTML = html;
+  });
+}
+
+function markActiveMatch() {
+  document.querySelectorAll('.hl.active-match').forEach(el => el.classList.remove('active-match'));
+  if (!allMatches.length) return;
+  const spans = document.querySelectorAll('.hl[data-match-idx="' + matchIndex + '"]');
+  spans.forEach(s => {
+    s.classList.add('active-match');
+    s.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+
+function updateFileHighlightState(regex) {
+  document.querySelectorAll('.file-item').forEach(item => {
+    const fname = item.dataset.file;
+    const fileData = FILES.find(f => f.name === fname);
+    if (!fileData || !regex) { item.classList.remove('has-match'); return; }
+    regex.lastIndex = 0;
+    const hasMatch = fileData.lines.some(l => { regex.lastIndex = 0; return regex.test(l.text); });
+    item.classList.toggle('has-match', hasMatch);
+  });
+}
+
+function runSearch() {
+  const raw = searchInput.value.trim();
+  clearHighlights();
+  allMatches = [];
+  matchIndex = 0;
+  if (!raw) {
+    currentRegex = null;
+    searchCount.textContent = '';
+    searchCount.className = 'search-count';
+    searchInput.classList.remove('error');
+    updateFileHighlightState(null);
+    return;
+  }
+  try {
+    currentRegex = new RegExp(raw, 'gi');
+    searchInput.classList.remove('error');
+  } catch(e) {
+    searchInput.classList.add('error');
+    searchCount.textContent = 'invalid regex';
+    searchCount.className = 'search-count error';
+    currentRegex = null;
+    updateFileHighlightState(null);
+    return;
+  }
+  highlightAll(currentRegex);
+  currentRegex.lastIndex = 0;
+  updateFileHighlightState(currentRegex);
+  if (!allMatches.length) {
+    searchCount.textContent = 'no matches';
+    searchCount.className = 'search-count';
+  } else {
+    searchCount.textContent = '1 / ' + allMatches.length + ' matches';
+    searchCount.className = 'search-count has-results';
+    markActiveMatch();
+  }
+}
+
+searchInput.addEventListener('input', runSearch);
+searchInput.addEventListener('keydown', e => {
+  if (!allMatches.length) return;
+  if (e.key === 'Enter') {
+    matchIndex = e.shiftKey
+      ? (matchIndex - 1 + allMatches.length) % allMatches.length
+      : (matchIndex + 1) % allMatches.length;
+    searchCount.textContent = (matchIndex + 1) + ' / ' + allMatches.length + ' matches';
+    markActiveMatch();
+    e.preventDefault();
+  }
+});
+
+// ── file navigation ───────────────────────────────────────────────────────────
+function setActive(name) {
+  document.querySelectorAll('.file-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.file === name));
+  const target = document.getElementById('file-' + CSS.escape(name));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.querySelectorAll('.file-item').forEach(el =>
+  el.addEventListener('click', () => setActive(el.dataset.file)));
+
+const firstItem = document.querySelector('.file-item');
+if (firstItem) firstItem.classList.add('active');
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const name = entry.target.dataset.file;
+      document.querySelectorAll('.file-item').forEach(el =>
+        el.classList.toggle('active', el.dataset.file === name));
+      const sideItem = document.querySelector('.file-item[data-file="' + CSS.escape(name) + '"]');
+      if (sideItem) sideItem.scrollIntoView({ block: 'nearest' });
+    }
+  });
+}, { root: document.getElementById('diff-panel'), threshold: 0.1 });
+
+document.querySelectorAll('.diff-file').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>`;
+}
+
+// ── server ────────────────────────────────────────────────────────────────────
+
+function openBrowser(url) {
+  const platform = process.platform;
+  const cmd = platform === 'darwin' ? 'open'
+             : platform === 'win32' ? 'start'
+             : 'xdg-open';
+  exec(`${cmd} ${url}`);
+}
+
+function main() {
+  const hash = process.argv[2];
+  if (!hash) {
+    console.error('Usage: node gitdiff.js <commit-hash>');
+    process.exit(1);
+  }
+
+  console.log(`Building diff for ${hash}…`);
+  const html = buildHtml(hash);
+  const buf  = Buffer.from(html, 'utf8');
+
+  const PORT = 7788;
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(buf);
+  });
+
+  server.listen(PORT, '127.0.0.1', () => {
+    const url = `http://127.0.0.1:${PORT}`;
+    console.log(`Opening ${url}`);
+    setTimeout(() => openBrowser(url), 400);
+  });
+
+  process.on('SIGINT', () => {
+    console.log('\nBye!');
+    process.exit(0);
+  });
+}
+
+main();
