@@ -139,7 +139,8 @@ export PATH="$PATH:$HOME/src/scripts"
 alias lola="git log --graph --pretty='%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --all"
 alias gwipe="echo 'Nope, maybe you want gwip?'"
 alias pullf="git fetch && git reset --hard @{u} && git clean -fd"
-
+alias rebase='branch=$(git rev-parse --abbrev-ref HEAD); if [[ $branch == saas-* ]]; then base="${branch%%-*}-${${branch#*-}%%-*}"; else base="${branch%%-*}"; fi; git fetch odoo "$base" && git rebase "odoo/$base"'
+alias hoot='python3 ~/src/scripts/failing_hoot.py'
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
@@ -151,3 +152,7 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 . "$HOME/.local/bin/env"
+
+
+# Added by Antigravity CLI installer
+export PATH="$HOME/.local/bin:$PATH"
