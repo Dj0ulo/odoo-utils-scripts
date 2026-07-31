@@ -17,16 +17,52 @@
         },
         {
             "path": "scripts"
+        },
+        {
+            "path": "upgrade-util"
         }
     ],
     "settings": {
-        "python.defaultInterpreterPath": "~/src/venv/bin/python3",
+        "python.defaultInterpreterPath": "/home/jula/src/venv/bin/python3",
         "python.analysis.extraPaths": [
             "~/src/symlink",
             "~/src/odoo",
             "~/src",
         ],
         "git.ignoreLimitWarning": true,
+        "files.watcherExclude": {
+            "**/.git/objects/**": true,
+            "**/.git/subtree-cache/**": true,
+            "**/node_modules/**": true,
+            "**/__pycache__/**": true,
+            "**/*.pyc": true,
+            "**/.mypy_cache/**": true,
+            "**/.ruff_cache/**": true,
+            "**/static/**/*.min.js": true,
+            "**/i18n/**/*.po": true,
+            "**/i18n/**/*.pot": true
+        },
+        "search.exclude": {
+            "**/node_modules": true,
+            "**/__pycache__": true,
+            "**/*.pyc": true,
+            "**/static/**/*.min.js": true,
+            "**/i18n/**/*.po": true,
+            "**/i18n/**/*.pot": true
+        },
+        "python.analysis.diagnosticMode": "openFilesOnly",
+        "python.analysis.indexing": false,
+        "python.analysis.autoImportCompletions": false,
+        "python.analysis.persistAllIndices": false,
+        "python.analysis.exclude": [
+            "**/node_modules/**",
+            "**/__pycache__/**",
+            "**/static/lib/**",
+            "**/i18n/**"
+        ],
+        "typescript.tsserver.maxTsServerMemory": 3072,
+        "typescript.disableAutomaticTypeAcquisition": true,
+        "javascript.validate.enable": false,
         "editor.defaultFormatter": "dbaeumer.vscode-eslint",
         "[css]": {
             "editor.defaultFormatter": "vscode.css-language-features"
