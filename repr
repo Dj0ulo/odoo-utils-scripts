@@ -1,0 +1,9 @@
+#!/bin/bash
+base=$(gh pr view --json baseRefName -q .baseRefName) || exit 1
+git fetch odoo "$base" && gh pr edit --body "$(
+  if [ "$(git rev-list --count "odoo/$base..HEAD")" -eq 1 ]; then
+    git log "odoo/$base..HEAD" --pretty=format:'%b'
+  else
+    git log --reverse "odoo/$base..HEAD" --pretty=format:'%s%n---%n%b'
+  fi
+)"
