@@ -21,10 +21,26 @@ fi
 
 # Create the fixup commit
 echo "Creating fixup commit for $COMMIT..."
+if git diff --cached --quiet; then
+    git add -A
+fi
 git commit --fixup="$COMMIT"
+
+# The rebase needs a clean tree: set aside whatever was left unstaged
+STASHED=0
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "Stashing remaining changes..."
+    git stash push --include-untracked --message "fixup: temporary stash"
+    STASHED=1
+fi
 
 # Perform interactive rebase with autosquash (without opening editor)
 echo "Rebasing with autosquash..."
 GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash "$COMMIT~2"
+
+if [ "$STASHED" -eq 1 ]; then
+    echo "Restoring stashed changes..."
+    git stash pop
+fi
 
 echo "Done! Fixup commit has been squashed into $COMMIT"
