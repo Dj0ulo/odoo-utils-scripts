@@ -7,19 +7,19 @@
             "path": "enterprise"
         },
         {
-            "path": "internal"
+            "path": "design-themes"
         },
         {
             "path": "upgrade"
         },
         {
-            "path": "design-themes"
+            "path": "internal"
+        },
+        {
+            "path": "documentation"
         },
         {
             "path": "scripts"
-        },
-        {
-            "path": "upgrade-util"
         }
     ],
     "settings": {
