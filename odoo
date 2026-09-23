@@ -5,8 +5,20 @@ import os
 import re
 
 
-def infer_current_branch_from_release(src_dir):
-    release_file = f'{src_dir}/odoo{"-tmp" if "--tmp" in sys.argv else ""}/odoo/release.py'
+def find_odoo_dir(src_dir):
+    """Odoo worktree containing the cwd, or the default checkout."""
+    if '--tmp' in sys.argv:
+        return f'{src_dir}/odoo-tmp'
+    d = os.getcwd()
+    while d != '/':
+        if os.path.exists(f'{d}/odoo-bin'):
+            return d
+        d = os.path.dirname(d)
+    return f'{src_dir}/odoo'
+
+
+def infer_current_branch_from_release(odoo_dir):
+    release_file = f'{odoo_dir}/odoo/release.py'
     with open(release_file) as f:
         for line in f:
             if line.strip().startswith('version_info'):
@@ -45,16 +57,16 @@ def infer_current_branch_from_release(src_dir):
         raise RuntimeError("Unknown version_info format")
 
 
-def get_current_version_tuple(src_dir):
-    branch = infer_current_branch_from_release(src_dir)
+def get_current_version_tuple(odoo_dir):
+    branch = infer_current_branch_from_release(odoo_dir)
     if branch.startswith('saas-'):
         branch = branch[5:]
 
     major_str, minor_str = branch.split('.', 1)
     return int(major_str), int(minor_str)
     
-def generate_db_name():
-    current_branch = infer_current_branch_from_release(src_dir)
+def generate_db_name(odoo_dir):
+    current_branch = infer_current_branch_from_release(odoo_dir)
     if current_branch.startswith('saas'):
         dbname = f'db-{current_branch[5:]}'
     else:
@@ -67,8 +79,9 @@ def generate_db_name():
 
 
 src_dir = os.path.expanduser('~/src')
+odoo_dir = find_odoo_dir(src_dir)
 
-command = [f'{src_dir}/odoo{"-tmp" if "--tmp" in sys.argv else ""}/odoo-bin']
+command = [f'{odoo_dir}/odoo-bin']
 odoo_bin_args = sys.argv[1:]
 extra_addons_paths = []
 
@@ -96,7 +109,7 @@ if odoo_bin_args:
     command += odoo_bin_args
 
 if (
-    get_current_version_tuple(src_dir) >= (18, 3)
+    get_current_version_tuple(odoo_dir) >= (18, 3)
     and not any('--with-demo' in arg or '--without-demo' in arg for arg in odoo_bin_args)
 ):
     command.append('--with-demo')
@@ -104,13 +117,13 @@ if (
 if '-d' in sys.argv:
     dbname = sys.argv[sys.argv.index('-d') + 1]
 else:
-    dbname = generate_db_name()
+    dbname = generate_db_name(odoo_dir)
     command += ['-d', dbname]
 
-os.chdir(f'{src_dir}/odoo{"-tmp" if "--tmp" in sys.argv else ""}')
+os.chdir(odoo_dir)
 
 addons_path = [
-    f'{src_dir}/odoo{"-tmp" if "--tmp" in sys.argv else ""}/addons',
+    f'{odoo_dir}/addons',
     f'{src_dir}/scripts/addons',
 ]
 if '--enterprise' in sys.argv or '-e' in sys.argv:
