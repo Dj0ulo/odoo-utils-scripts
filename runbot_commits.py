@@ -73,13 +73,14 @@ def main():
                 commit_hash = path_parts[3]
 
                 # Reconstruct the base remote URL (e.g., https://github.com/odoo/odoo)
-                remote_url = f"https://github.com/odoo/{repo}"
+                remote_url = f"git@github.com:odoo/{repo}.git"
 
                 # Generate the one-liner command chaining with &&
                 one_liner = (
-                    f"cd ~/src/{repo} && "
-                    f"git fetch {remote_url} {commit_hash} && "
-                    f"git rebase {commit_hash}"
+                    f"\ncd ~/src/{repo} && "
+                    f"HASH={commit_hash} && "
+                    f"git fetch {remote_url} $HASH && "
+                    f"git rebase $HASH"
                 )
 
                 print(one_liner)
