@@ -78,6 +78,18 @@ def generate_db_name(odoo_dir):
     return dbname
 
 
+def venv_env(venv_dir):
+    """Environment with venv_dir activated, if it isn't already."""
+    env = os.environ.copy()
+    if os.path.realpath(env.get('VIRTUAL_ENV', '')) == os.path.realpath(venv_dir):
+        return env
+    print(f'Activating venv {venv_dir}')
+    env['VIRTUAL_ENV'] = venv_dir
+    env['PATH'] = f'{venv_dir}/bin{os.pathsep}{env.get("PATH", "")}'
+    env.pop('PYTHONHOME', None)
+    return env
+
+
 src_dir = os.path.expanduser('~/src')
 odoo_dir = find_odoo_dir(src_dir)
 
@@ -169,7 +181,7 @@ def print_complete_command():
 try:
     print_complete_command()
     print()
-    subprocess.call(command)
+    subprocess.call(command, env=venv_env(f'{src_dir}/venv'))
 except:
     pass
 finally:
