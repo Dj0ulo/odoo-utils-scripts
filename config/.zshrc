@@ -141,6 +141,22 @@ alias gwipe="echo 'Nope, maybe you want gwip?'"
 alias pullf="git fetch && git reset --hard @{u} && git clean -fd"
 alias rebase='branch=$(git rev-parse --abbrev-ref HEAD); if [[ $branch == saas-* ]]; then base="${branch%%-*}-${${branch#*-}%%-*}"; else base="${branch%%-*}"; fi; git fetch odoo "$base" && git rebase "odoo/$base"'
 alias hoot='python3 ~/src/scripts/failing_hoot.py'
+odootest() {
+  local v=${1:?usage: odootest <version>}
+  local b="$v-test"
+  for repo in ~/src/enterprise-tmp ~/src/odoo-tmp; do
+    cd "$repo" || return
+    git fetch odoo "$v" || return
+    if [[ $(git branch --show-current) != "$b" ]]; then
+      if git show-ref --verify --quiet "refs/heads/$b"; then
+        git switch "$b"
+      else
+        git switch -c "$b" --no-track "odoo/$v"
+      fi || return
+    fi
+    git rebase "odoo/$v" || return
+  done
+}
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
