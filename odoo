@@ -174,6 +174,20 @@ if '--new' in sys.argv:
         exit(0)
 
 
+def http_port(args):
+    for i, arg in enumerate(args):
+        if arg in ('-p', '--http-port') and i + 1 < len(args):
+            return int(args[i + 1])
+        if arg.startswith('--http-port='):
+            return int(arg.split('=', 1)[1])
+    return 8069
+
+
+port = http_port(command)
+if subprocess.call(['fuser', '-s', '-k', '-9', f'{port}/tcp']) == 0:
+    print(f'Killed Odoo instance running on port {port}')
+
+
 def print_complete_command():
     print(' '.join(command))
 
