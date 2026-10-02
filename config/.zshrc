@@ -83,7 +83,6 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
     deno
     docker
     git
-    github
     gitignore
     history-substring-search
     node
