@@ -140,6 +140,16 @@ alias gwipe="echo 'Nope, maybe you want gwip?'"
 alias pullf="git fetch && git reset --hard @{u} && git clean -fd"
 alias rebase='branch=$(git rev-parse --abbrev-ref HEAD); if [[ $branch == saas-* ]]; then base="${branch%%-*}-${${branch#*-}%%-*}"; else base="${branch%%-*}"; fi; git fetch odoo "$base" && git rebase "odoo/$base"'
 alias hoot='python3 ~/src/scripts/failing_hoot.py'
+function gppr {
+  local branch=$(git_current_branch) base draft=--draft
+  [[ $1 == --ready ]] && draft=
+  if [[ $branch == saas-* ]]; then
+    base="${branch%%-*}-${${branch#*-}%%-*}"
+  else
+    base="${branch%%-*}"
+  fi
+  git push -u odoo-dev "$branch" && gh pr create --fill-first --base "$base" $draft
+}
 odootest() {
   local v=${1:?usage: odootest <version>}
   local b="$v-test"
